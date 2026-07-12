@@ -3,8 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  Widget buildSubject(ValueChanged<int> onStartGame) {
-    return MaterialApp(home: HomeScreen(onStartGame: onStartGame));
+  Widget buildSubject(
+    ValueChanged<int> onStartGame, {
+    VoidCallback? onOpenRules,
+    VoidCallback? onOpenSettings,
+  }) {
+    return MaterialApp(
+      home: HomeScreen(
+        onStartGame: onStartGame,
+        onOpenRules: onOpenRules ?? () {},
+        onOpenSettings: onOpenSettings ?? () {},
+      ),
+    );
   }
 
   testWidgets('shows the app title', (tester) async {
@@ -81,6 +91,70 @@ void main() {
   ) async {
     await tester.pumpWidget(buildSubject((_) {}));
     expect(find.bySemanticsLabel('Word length selection'), findsOneWidget);
+  });
+
+  testWidgets('shows the Start Game action', (tester) async {
+    await tester.pumpWidget(buildSubject((_) {}));
+    expect(find.widgetWithText(FilledButton, 'Start Game'), findsOneWidget);
+  });
+
+  testWidgets('shows the How to Play action', (tester) async {
+    await tester.pumpWidget(buildSubject((_) {}));
+    expect(find.text('How to Play'), findsOneWidget);
+  });
+
+  testWidgets('shows the Settings action', (tester) async {
+    await tester.pumpWidget(buildSubject((_) {}));
+    expect(find.text('Settings'), findsOneWidget);
+  });
+
+  testWidgets('Start Game is visually distinct from the secondary actions', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildSubject((_) {}));
+    expect(find.widgetWithText(FilledButton, 'Start Game'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'How to Play'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Settings'), findsOneWidget);
+  });
+
+  testWidgets('tapping How to Play invokes onOpenRules exactly once', (
+    tester,
+  ) async {
+    var callCount = 0;
+    await tester.pumpWidget(
+      buildSubject((_) {}, onOpenRules: () => callCount++),
+    );
+
+    await tester.tap(find.text('How to Play'));
+    await tester.pumpAndSettle();
+
+    expect(callCount, 1);
+  });
+
+  testWidgets('tapping Settings invokes onOpenSettings exactly once', (
+    tester,
+  ) async {
+    var callCount = 0;
+    await tester.pumpWidget(
+      buildSubject((_) {}, onOpenSettings: () => callCount++),
+    );
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    expect(callCount, 1);
+  });
+
+  testWidgets('starting the game invokes onStartGame exactly once', (
+    tester,
+  ) async {
+    var callCount = 0;
+    await tester.pumpWidget(buildSubject((_) => callCount++));
+
+    await tester.tap(find.text('Start Game'));
+    await tester.pumpAndSettle();
+
+    expect(callCount, 1);
   });
 
   testWidgets('does not overflow on a narrow screen', (tester) async {

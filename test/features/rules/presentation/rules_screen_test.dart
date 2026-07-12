@@ -1,0 +1,110 @@
+import 'package:cowbullgame/features/rules/presentation/rules_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  const attemptLimits = {4: 10, 5: 15, 6: 20};
+
+  Widget buildSubject() {
+    return const MaterialApp(
+      home: RulesScreen(attemptLimitsByWordLength: attemptLimits),
+    );
+  }
+
+  testWidgets('shows the title', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    expect(find.text('How to Play'), findsWidgets);
+  });
+
+  testWidgets('explains that the player guesses a secret word', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    expect(find.textContaining('secret'), findsWidgets);
+  });
+
+  testWidgets('explains the bull definition', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    expect(find.text('Bulls'), findsWidgets);
+    expect(
+      find.textContaining('correct and in the right position'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('explains the cow definition', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    expect(find.text('Cows'), findsWidgets);
+    expect(
+      find.textContaining('correct but in the wrong position'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('explains the duplicate-letter rule', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    expect(
+      find.textContaining('never be counted more times than it'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('explains invalid guesses do not consume attempts', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildSubject());
+    expect(find.textContaining('does not use up an attempt'), findsOneWidget);
+  });
+
+  testWidgets('shows the 4, 5, and 6 letter attempt limits', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    expect(find.textContaining('4 letters: 10 attempts'), findsOneWidget);
+    expect(find.textContaining('5 letters: 15 attempts'), findsOneWidget);
+    expect(find.textContaining('6 letters: 20 attempts'), findsOneWidget);
+  });
+
+  testWidgets('renders both worked examples', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    expect(find.text('Secret: APPLE'), findsOneWidget);
+    expect(find.text('Guess: AMPLE'), findsOneWidget);
+    expect(find.text('Secret: SPEED'), findsOneWidget);
+    expect(find.text('Guess: EERIE'), findsOneWidget);
+  });
+
+  testWidgets('exposes example results as text', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    expect(find.textContaining('Bulls: 4   Cows: 0'), findsOneWidget);
+    expect(find.textContaining('Bulls: 0   Cows: 2'), findsOneWidget);
+  });
+
+  testWidgets('exposes example results through semantics', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    expect(find.bySemanticsLabel(RegExp('4 bulls, 0 cows')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('0 bulls, 2 cows')), findsOneWidget);
+  });
+
+  testWidgets('scrolls on a narrow display without overflowing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 480);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+  });
+
+  testWidgets('does not throw under large text scaling', (tester) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(textScaler: TextScaler.linear(3.0)),
+        child: buildSubject(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+}

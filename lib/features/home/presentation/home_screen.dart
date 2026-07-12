@@ -1,21 +1,34 @@
 import 'package:flutter/material.dart';
 
-/// The app's entry screen: a brief explanation of the game and a choice of
-/// secret-word length (4, 5, or 6 letters) that starts a game.
+/// The app's entry screen: a brief explanation of the game, a choice of
+/// secret-word length (4, 5, or 6 letters), and entry points to starting a
+/// game, How to Play, and Settings.
 ///
 /// Purely presentational and feature-local — it owns only the selected word
-/// length as a plain `int` and never imports anything from the `game`
-/// feature (no `GameConfig`, no repository, no engine, no controller).
-/// Starting a game is handed off entirely to [onStartGame], which the
-/// app-level composition root supplies; that composition root is the one
-/// place that turns the chosen length into a `GameConfig` via
-/// `GameConfig.forWordLength`.
+/// length as a plain `int` and never imports anything from the `game`,
+/// `rules`, or `settings` features (no `GameConfig`, no repository, no
+/// engine, no controller, no other feature's screen). All three actions are
+/// handed off entirely to [onStartGame], [onOpenRules], and [onOpenSettings],
+/// which the app-level composition root supplies; that composition root is
+/// the one place that turns the chosen length into a `GameConfig` via
+/// `GameConfig.forWordLength` and owns navigation to the other screens.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.onStartGame});
+  const HomeScreen({
+    super.key,
+    required this.onStartGame,
+    required this.onOpenRules,
+    required this.onOpenSettings,
+  });
 
   /// Called with the chosen word length (4, 5, or 6) when the player starts
   /// a game.
   final ValueChanged<int> onStartGame;
+
+  /// Called when the player wants to see the How to Play screen.
+  final VoidCallback onOpenRules;
+
+  /// Called when the player wants to see the Settings screen.
+  final VoidCallback onOpenSettings;
 
   static const List<int> _wordLengthOptions = [4, 5, 6];
 
@@ -81,6 +94,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),
                   child: Text('Start Game'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: widget.onOpenRules,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('How to Play'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: widget.onOpenSettings,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('Settings'),
                 ),
               ),
             ],
