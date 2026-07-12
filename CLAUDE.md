@@ -110,8 +110,9 @@ screens directly in the meantime.
 `assets/source/` holds raw, unmodified dictionaries. `assets/generated/` holds
 derived word lists (e.g. filtered by length, deduplicated, frequency-ranked)
 produced by a script in `scripts/`. Never hand-edit files in
-`assets/generated/` — regenerate them from source instead. Document the
-regeneration command in `docs/`.
+`assets/generated/` — regenerate them from source instead by running
+`dart run scripts/generate_word_lists.dart`; see `docs/word_lists.md` for
+the full pipeline.
 
 ## Coding standards
 
