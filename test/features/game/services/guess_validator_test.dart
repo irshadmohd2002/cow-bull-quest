@@ -88,5 +88,17 @@ void main() {
         GuessValidationFailure.gameAlreadyWon,
       );
     });
+
+    test('rejects any guess once the game has been lost', () {
+      final result = validator.validate(
+        rawGuess: 'crane',
+        secretWordLength: 5,
+        status: GameStatus.lost,
+      );
+      expect(
+        (result as InvalidGuess).reason,
+        GuessValidationFailure.gameAlreadyLost,
+      );
+    });
   });
 }

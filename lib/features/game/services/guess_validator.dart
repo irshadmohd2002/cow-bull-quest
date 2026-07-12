@@ -16,6 +16,10 @@ enum GuessValidationFailure {
 
   /// The game has already been won; no further guesses are accepted.
   gameAlreadyWon,
+
+  /// The game has already been lost (attempts exhausted); no further
+  /// guesses are accepted.
+  gameAlreadyLost,
 }
 
 /// The outcome of validating a raw guess: either [ValidGuess], carrying the
@@ -47,9 +51,9 @@ final class InvalidGuess extends GuessValidation {
 
 /// Validates a raw guess string before it is scored.
 ///
-/// Checks run in a fixed order — already-won, then blank, then length,
-/// then character set — so exactly one [GuessValidationFailure] reason is
-/// ever reported per call.
+/// Checks run in a fixed order — already-won, then already-lost, then
+/// blank, then length, then character set — so exactly one
+/// [GuessValidationFailure] reason is ever reported per call.
 class GuessValidator {
   const GuessValidator();
 
@@ -62,6 +66,9 @@ class GuessValidator {
   }) {
     if (status == GameStatus.won) {
       return const InvalidGuess(GuessValidationFailure.gameAlreadyWon);
+    }
+    if (status == GameStatus.lost) {
+      return const InvalidGuess(GuessValidationFailure.gameAlreadyLost);
     }
     if (rawGuess.trim().isEmpty) {
       return const InvalidGuess(GuessValidationFailure.blank);

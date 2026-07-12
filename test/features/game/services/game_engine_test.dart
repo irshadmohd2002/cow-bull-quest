@@ -1,3 +1,4 @@
+import 'package:cowbullgame/features/game/models/game_config.dart';
 import 'package:cowbullgame/features/game/models/game_status.dart';
 import 'package:cowbullgame/features/game/models/guess_result.dart';
 import 'package:cowbullgame/features/game/services/game_engine.dart';
@@ -6,19 +7,38 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   const engine = GameEngine();
+  final config5 = GameConfig.forWordLength(5);
+  final config4 = GameConfig.forWordLength(4);
 
   group('GameEngine.startGame', () {
     test('starts with empty history and in-progress status', () {
-      final session = engine.startGame(secretWord: 'crane');
+      final session = engine.startGame(secretWord: 'crane', config: config5);
       expect(session.guesses, isEmpty);
       expect(session.status, GameStatus.inProgress);
       expect(session.secretWord, 'crane');
     });
+
+    test('takes its attempt limit from the config', () {
+      final session = engine.startGame(secretWord: 'crane', config: config5);
+      expect(session.maxAttempts, 15);
+      expect(session.attemptsUsed, 0);
+      expect(session.attemptsRemaining, 15);
+    });
+
+    test(
+      'throws ArgumentError when secretWord length does not match config',
+      () {
+        expect(
+          () => engine.startGame(secretWord: 'crane', config: config4),
+          throwsArgumentError,
+        );
+      },
+    );
   });
 
   group('GameEngine.submitGuess', () {
     test('accepts and normalizes a valid guess', () {
-      final session = engine.startGame(secretWord: 'crane');
+      final session = engine.startGame(secretWord: 'crane', config: config5);
       final submission = engine.submitGuess(
         session: session,
         rawGuess: 'CRANE',
@@ -29,7 +49,7 @@ void main() {
     });
 
     test('records the correct scored result', () {
-      final session = engine.startGame(secretWord: 'crane');
+      final session = engine.startGame(secretWord: 'crane', config: config5);
       final submission = engine.submitGuess(
         session: session,
         rawGuess: 'canoe',
@@ -43,7 +63,7 @@ void main() {
     });
 
     test('preserves earlier history when a new guess is added', () {
-      var session = engine.startGame(secretWord: 'crane');
+      var session = engine.startGame(secretWord: 'crane', config: config5);
       session =
           (engine.submitGuess(session: session, rawGuess: 'aaaaa')
                   as GuessAccepted)
@@ -62,7 +82,7 @@ void main() {
     });
 
     test('invalid guesses do not change history', () {
-      final session = engine.startGame(secretWord: 'crane');
+      final session = engine.startGame(secretWord: 'crane', config: config5);
       final submission = engine.submitGuess(
         session: session,
         rawGuess: 'cr4ne',
@@ -76,7 +96,7 @@ void main() {
     });
 
     test('a winning guess changes the status to won', () {
-      final session = engine.startGame(secretWord: 'crane');
+      final session = engine.startGame(secretWord: 'crane', config: config5);
       final submission = engine.submitGuess(
         session: session,
         rawGuess: 'crane',
@@ -86,7 +106,7 @@ void main() {
     });
 
     test('the winning guess itself is recorded in history', () {
-      final session = engine.startGame(secretWord: 'crane');
+      final session = engine.startGame(secretWord: 'crane', config: config5);
       final accepted =
           engine.submitGuess(session: session, rawGuess: 'crane')
               as GuessAccepted;
@@ -98,7 +118,7 @@ void main() {
     });
 
     test('guesses submitted after winning are rejected', () {
-      final session = engine.startGame(secretWord: 'crane');
+      final session = engine.startGame(secretWord: 'crane', config: config5);
       final wonSession =
           (engine.submitGuess(session: session, rawGuess: 'crane')
                   as GuessAccepted)
@@ -118,7 +138,10 @@ void main() {
     });
 
     test('does not mutate the previous session on a valid guess', () {
-      final originalSession = engine.startGame(secretWord: 'crane');
+      final originalSession = engine.startGame(
+        secretWord: 'crane',
+        config: config5,
+      );
       final submission = engine.submitGuess(
         session: originalSession,
         rawGuess: 'grape',
@@ -132,11 +155,148 @@ void main() {
     });
 
     test('does not mutate the previous session on an invalid guess', () {
-      final originalSession = engine.startGame(secretWord: 'crane');
+      final originalSession = engine.startGame(
+        secretWord: 'crane',
+        config: config5,
+      );
       engine.submitGuess(session: originalSession, rawGuess: '123');
 
       expect(originalSession.guesses, isEmpty);
       expect(originalSession.status, GameStatus.inProgress);
+    });
+
+    test(
+      'a rejected submission carries the exact original session instance',
+      () {
+        final originalSession = engine.startGame(
+          secretWord: 'crane',
+          config: config5,
+        );
+        final submission = engine.submitGuess(
+          session: originalSession,
+          rawGuess: 'cr4ne',
+        );
+        expect(submission, isA<GuessRejected>());
+        expect(identical(submission.session, originalSession), isTrue);
+      },
+    );
+
+    test('an accepted submission exposes the new session via .session', () {
+      final originalSession = engine.startGame(
+        secretWord: 'crane',
+        config: config5,
+      );
+      final submission = engine.submitGuess(
+        session: originalSession,
+        rawGuess: 'grape',
+      );
+      expect(submission, isA<GuessAccepted>());
+      expect(identical(submission.session, originalSession), isFalse);
+    });
+  });
+
+  group('GameEngine attempt-limit rules', () {
+    test('a valid incorrect guess consumes exactly one attempt', () {
+      final session = engine.startGame(secretWord: 'lace', config: config4);
+      final accepted =
+          engine.submitGuess(session: session, rawGuess: 'race')
+              as GuessAccepted;
+      expect(accepted.session.attemptsUsed, 1);
+      expect(accepted.session.attemptsRemaining, 9);
+    });
+
+    test('an invalid guess consumes no attempt', () {
+      final session = engine.startGame(secretWord: 'lace', config: config4);
+      final rejected =
+          engine.submitGuess(session: session, rawGuess: 'toolong')
+              as GuessRejected;
+      expect(rejected.session.attemptsUsed, 0);
+      expect(rejected.session.attemptsRemaining, 10);
+    });
+
+    test('multiple accepted guesses reduce remaining attempts correctly', () {
+      var session = engine.startGame(secretWord: 'lace', config: config4);
+      for (final guess in ['race', 'mace', 'pace']) {
+        session =
+            (engine.submitGuess(session: session, rawGuess: guess)
+                    as GuessAccepted)
+                .session;
+      }
+      expect(session.attemptsUsed, 3);
+      expect(session.attemptsRemaining, 7);
+      expect(session.status, GameStatus.inProgress);
+    });
+
+    test('a correct guess before the final attempt wins', () {
+      var session = engine.startGame(secretWord: 'lace', config: config4);
+      session =
+          (engine.submitGuess(session: session, rawGuess: 'race')
+                  as GuessAccepted)
+              .session;
+      session =
+          (engine.submitGuess(session: session, rawGuess: 'lace')
+                  as GuessAccepted)
+              .session;
+      expect(session.status, GameStatus.won);
+      expect(session.attemptsUsed, 2);
+    });
+
+    test('a correct guess on the final attempt wins, not loses', () {
+      var session = engine.startGame(secretWord: 'lace', config: config4);
+      // Exhaust 9 of 10 attempts with wrong guesses.
+      for (var i = 0; i < 9; i++) {
+        session =
+            (engine.submitGuess(session: session, rawGuess: 'race')
+                    as GuessAccepted)
+                .session;
+      }
+      expect(session.attemptsRemaining, 1);
+
+      final finalSubmission =
+          engine.submitGuess(session: session, rawGuess: 'lace')
+              as GuessAccepted;
+      expect(finalSubmission.session.status, GameStatus.won);
+      expect(finalSubmission.session.attemptsUsed, 10);
+      expect(finalSubmission.session.attemptsRemaining, 0);
+    });
+
+    test('a valid incorrect final guess loses', () {
+      var session = engine.startGame(secretWord: 'lace', config: config4);
+      for (var i = 0; i < 9; i++) {
+        session =
+            (engine.submitGuess(session: session, rawGuess: 'race')
+                    as GuessAccepted)
+                .session;
+      }
+      expect(session.attemptsRemaining, 1);
+
+      final finalSubmission =
+          engine.submitGuess(session: session, rawGuess: 'mace')
+              as GuessAccepted;
+      expect(finalSubmission.session.status, GameStatus.lost);
+      expect(finalSubmission.session.attemptsUsed, 10);
+      expect(finalSubmission.session.attemptsRemaining, 0);
+    });
+
+    test('no submission is accepted once the game has been lost', () {
+      var session = engine.startGame(secretWord: 'lace', config: config4);
+      for (var i = 0; i < 10; i++) {
+        session =
+            (engine.submitGuess(session: session, rawGuess: 'race')
+                    as GuessAccepted)
+                .session;
+      }
+      expect(session.status, GameStatus.lost);
+
+      final submission = engine.submitGuess(session: session, rawGuess: 'lace');
+      expect(submission, isA<GuessRejected>());
+      expect(
+        (submission as GuessRejected).reason,
+        GuessValidationFailure.gameAlreadyLost,
+      );
+      expect(identical(submission.session, session), isTrue);
+      // The losing guess itself remains the final entry in history.
+      expect(session.guesses, hasLength(10));
     });
   });
 }
