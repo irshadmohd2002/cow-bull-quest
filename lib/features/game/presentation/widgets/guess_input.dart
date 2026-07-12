@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../theme/app_spacing.dart';
+
 /// Uppercases whatever the player types, purely for display — the domain
 /// layer normalizes case on its own, so this is a visual affordance only.
 class _UpperCaseTextFormatter extends TextInputFormatter {
@@ -22,7 +24,10 @@ class _UpperCaseTextFormatter extends TextInputFormatter {
 ///
 /// Controlled from the outside: [controller] and [focusNode] are owned by
 /// the parent (typically the gameplay screen) so it can clear the field
-/// after an accepted guess or select its text after a rejected one.
+/// after an accepted guess or select its text after a rejected one. The
+/// submit button additionally disables itself whenever the field is blank —
+/// a UI-only affordance to avoid pointless taps, not a duplicate of domain
+/// validation, which always remains authoritative.
 class GuessInput extends StatelessWidget {
   const GuessInput({
     super.key,
@@ -30,7 +35,7 @@ class GuessInput extends StatelessWidget {
     required this.focusNode,
     required this.wordLength,
     required this.enabled,
-    required this.errorText,
+    required this.hasError,
     required this.onSubmit,
   });
 
@@ -43,13 +48,14 @@ class GuessInput extends StatelessWidget {
   /// The secret word's length: caps input length and labels the field.
   final int wordLength;
 
-  /// Whether submission is currently allowed (false while loading or once
-  /// the game has ended).
+  /// Whether submission is currently allowed (false while loading, once the
+  /// game has ended, or while a submission is being processed).
   final bool enabled;
 
-  /// Human-facing validation feedback for the most recent rejection, or
-  /// `null` if the last submission was accepted or none has been made yet.
-  final String? errorText;
+  /// Whether the most recent submission was rejected — tints the field's
+  /// border as a secondary (non-sole) visual cue. The human-facing message
+  /// itself is shown by the caller, not duplicated here.
+  final bool hasError;
 
   /// Called with the current field text when the player submits, via
   /// either the submit button or the keyboard's action button.
@@ -59,6 +65,14 @@ class GuessInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final errorBorder = hasError
+        ? OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: colorScheme.error, width: 2),
+          )
+        : null;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -80,16 +94,16 @@ class GuessInput extends StatelessWidget {
               ],
               decoration: InputDecoration(
                 labelText: 'Your guess',
-                errorText: errorText,
-                border: const OutlineInputBorder(),
+                enabledBorder: errorBorder,
+                focusedBorder: errorBorder,
               ),
               onSubmitted: enabled ? (_) => _handleSubmit() : null,
             ),
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: AppSpacing.md),
         Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: const EdgeInsets.only(top: AppSpacing.xs),
           child: Semantics(
             button: true,
             label: 'Submit guess',

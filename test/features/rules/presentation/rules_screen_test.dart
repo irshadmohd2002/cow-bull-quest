@@ -132,4 +132,39 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('shows the four section headings', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    expect(find.text('Scoring'), findsOneWidget);
+    expect(find.text('Difficulty'), findsOneWidget);
+    expect(find.text('Attempt limits'), findsOneWidget);
+    expect(find.text('Examples'), findsOneWidget);
+  });
+
+  testWidgets('each rule item exposes exactly one semantic label, not one '
+      'per line of text', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    expect(
+      find.bySemanticsLabel(
+        'Bulls: A bull is a letter that is correct and in the right '
+        'position.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('renders without exceptions when animations are disabled', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(disableAnimations: true),
+        child: buildSubject(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('How to Play'), findsWidgets);
+  });
 }

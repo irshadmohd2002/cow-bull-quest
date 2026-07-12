@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/difficulty_selection.dart';
+import '../../../theme/app_motion.dart';
+import '../../../theme/app_spacing.dart';
 
 /// Concise, human-facing label for [option]. Presentation-layer concern —
 /// [DifficultyOption] itself carries no human-facing text.
@@ -73,32 +75,40 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Bulls & Cows')),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppSpacing.screenPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Bulls & Cows',
-                style: textTheme.headlineMedium,
-                textAlign: TextAlign.center,
+              Semantics(
+                header: true,
+                child: Text(
+                  'Bulls & Cows',
+                  style: textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.sm),
               Text(
                 'Guess the secret word. Each guess earns a bull for every '
                 'letter that is correct and in the right position, and a '
                 'cow for every letter that is correct but in the wrong '
                 'position.',
-                style: textTheme.bodyMedium,
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: AppSpacing.xxl),
               Text('Word length', style: textTheme.titleMedium),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               Semantics(
                 container: true,
                 label: 'Word length selection',
@@ -115,9 +125,21 @@ class _HomeScreenState extends State<HomeScreen> {
                       setState(() => _selectedWordLength = selection.first),
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: AppSpacing.sm),
+              AnimatedSwitcher(
+                duration: AppMotion.durationFor(context, AppMotion.fast),
+                switchInCurve: AppMotion.curve,
+                child: Text(
+                  'You\'ll guess a $_selectedWordLength-letter secret word.',
+                  key: ValueKey(_selectedWordLength),
+                  style: textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xxl),
               Text('Difficulty', style: textTheme.titleMedium),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               Semantics(
                 container: true,
                 label: 'Difficulty selection',
@@ -134,34 +156,52 @@ class _HomeScreenState extends State<HomeScreen> {
                       setState(() => _selectedDifficulty = selection.first),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               for (final option in DifficultyOption.values)
                 _DifficultyDescriptionRow(
                   label: _difficultyLabel(option),
                   description: _difficultyDescription(option),
                   selected: option == _selectedDifficulty,
                 ),
-              const SizedBox(height: 32),
+              const SizedBox(height: AppSpacing.xxl),
               FilledButton(
                 onPressed: _handleStart,
                 child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Text('Start Game'),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                children: [
+                  Expanded(child: Divider(color: colorScheme.outlineVariant)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                    ),
+                    child: Text(
+                      'more options',
+                      style: textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  Expanded(child: Divider(color: colorScheme.outlineVariant)),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
               OutlinedButton(
                 onPressed: widget.onOpenRules,
                 child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Text('How to Play'),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.sm),
               TextButton(
                 onPressed: widget.onOpenSettings,
                 child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Text('Settings'),
                 ),
               ),
@@ -176,8 +216,9 @@ class _HomeScreenState extends State<HomeScreen> {
 /// One row of the difficulty legend beneath the selector: a label and its
 /// concise description, always visible for all three options so a player
 /// can compare them before choosing. [selected] makes the currently chosen
-/// option visually distinct (bold label plus a check icon) without relying
-/// on color alone, and is mirrored into the row's [Semantics] label.
+/// option visually distinct (bold label, check icon, and a subtly tinted
+/// background that animates in) without relying on color alone, and is
+/// mirrored into the row's [Semantics] label.
 class _DifficultyDescriptionRow extends StatelessWidget {
   const _DifficultyDescriptionRow({
     required this.label,
@@ -192,12 +233,26 @@ class _DifficultyDescriptionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Semantics(
-        label: selected
-            ? '$label, selected: $description'
-            : '$label: $description',
+    final colorScheme = Theme.of(context).colorScheme;
+    return Semantics(
+      excludeSemantics: true,
+      label: selected
+          ? '$label, selected: $description'
+          : '$label: $description',
+      child: AnimatedContainer(
+        duration: AppMotion.durationFor(context, AppMotion.fast),
+        curve: AppMotion.curve,
+        margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs / 2),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
+        ),
+        decoration: BoxDecoration(
+          color: selected
+              ? colorScheme.secondaryContainer.withValues(alpha: 0.5)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -205,7 +260,7 @@ class _DifficultyDescriptionRow extends StatelessWidget {
               width: 20,
               child: selected ? const Icon(Icons.check, size: 18) : null,
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: AppSpacing.xs),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

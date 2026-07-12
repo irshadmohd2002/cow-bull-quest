@@ -4,6 +4,7 @@ import 'package:cowbullgame/features/game/models/game_config.dart';
 import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:cowbullgame/features/game/presentation/game_screen.dart';
 import 'package:cowbullgame/features/game/services/game_engine.dart';
+import 'package:cowbullgame/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -109,8 +110,8 @@ void main() {
     expect(find.textContaining('Hard'), findsOneWidget);
 
     await tester.pumpAndSettle();
-    // Active state.
-    expect(find.textContaining('Hard'), findsOneWidget);
+    // Active state: shown in both the AppBar and the status panel.
+    expect(find.textContaining('Hard'), findsAtLeastNWidgets(1));
 
     await enterAndSubmit(tester, 'lace');
     // Completed state.
@@ -374,5 +375,235 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('builds without exceptions in dark mode', (tester) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    final controller = GameController(wordRepository: repo, gameEngine: engine);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        darkTheme: AppTheme.dark,
+        themeMode: ThemeMode.dark,
+        home: GameScreen(controller: controller, config: config4),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await enterAndSubmit(tester, 'lace');
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the guess field is focused once the game becomes active', (
+    tester,
+  ) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    final controller = GameController(wordRepository: repo, gameEngine: engine);
+
+    await tester.pumpWidget(buildSubject(controller, config4));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.focusNode!.hasFocus, isTrue);
+  });
+
+  testWidgets('a rejected guess selects the existing text', (tester) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    final controller = GameController(wordRepository: repo, gameEngine: engine);
+
+    await tester.pumpWidget(buildSubject(controller, config4));
+    await tester.pumpAndSettle();
+
+    await enterAndSubmit(tester, 'to');
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    final controllerText = field.controller!;
+    expect(
+      controllerText.selection,
+      TextSelection(baseOffset: 0, extentOffset: controllerText.text.length),
+    );
+  });
+
+  testWidgets('the submit button is enabled during active play', (
+    tester,
+  ) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    final controller = GameController(wordRepository: repo, gameEngine: engine);
+
+    await tester.pumpWidget(buildSubject(controller, config4));
+    await tester.pumpAndSettle();
+
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Submit'),
+    );
+    expect(button.onPressed, isNotNull);
+  });
+
+  testWidgets(
+    'rapid repeated interaction does not duplicate an accepted guess',
+    (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'race');
+      await tester.tap(find.text('Submit'));
+      await tester.tap(find.text('Submit'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('RACE'), findsOneWidget);
+      expect(find.textContaining('Attempts used: 1'), findsOneWidget);
+    },
+  );
+
+  testWidgets('the validation banner is exposed through semantics', (
+    tester,
+  ) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    final controller = GameController(wordRepository: repo, gameEngine: engine);
+
+    await tester.pumpWidget(buildSubject(controller, config4));
+    await tester.pumpAndSettle();
+
+    await enterAndSubmit(tester, 'to');
+
+    expect(
+      find.bySemanticsLabel('Your guess must be exactly 4 letters.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a history row exposes turn, guess, and score as text', (
+    tester,
+  ) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    final controller = GameController(wordRepository: repo, gameEngine: engine);
+
+    await tester.pumpWidget(buildSubject(controller, config4));
+    await tester.pumpAndSettle();
+
+    await enterAndSubmit(tester, 'race');
+
+    expect(find.text('1'), findsOneWidget);
+    expect(find.text('RACE'), findsOneWidget);
+    expect(find.textContaining('Bulls:'), findsOneWidget);
+    expect(find.textContaining('Cows:'), findsOneWidget);
+  });
+
+  testWidgets('completion exposes the outcome and secret word through '
+      'semantics', (tester) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    final controller = GameController(wordRepository: repo, gameEngine: engine);
+
+    await tester.pumpWidget(buildSubject(controller, config4));
+    await tester.pumpAndSettle();
+
+    await enterAndSubmit(tester, 'lace');
+
+    expect(
+      find.bySemanticsLabel(RegExp('You won!.*secret word was lace')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('restart restores focus to the guess field', (tester) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    final controller = GameController(wordRepository: repo, gameEngine: engine);
+
+    await tester.pumpWidget(buildSubject(controller, config4));
+    await tester.pumpAndSettle();
+
+    await enterAndSubmit(tester, 'lace');
+    expect(find.text('You won!'), findsOneWidget);
+
+    await tester.tap(find.text('Restart'));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.focusNode!.hasFocus, isTrue);
+  });
+
+  group('reduced motion', () {
+    testWidgets('renders without exceptions when animations are disabled', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: buildSubject(controller, config4),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'the validation banner is visible after a single frame (no settling '
+      'needed)',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+
+        await tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(disableAnimations: true),
+            child: buildSubject(controller, config4),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField), 'to');
+        await tester.tap(find.text('Submit'));
+        await tester.pump(); // exactly one frame, no pumpAndSettle
+
+        expect(
+          find.text('Your guess must be exactly 4 letters.'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'completion content is visible after a single frame (no settling '
+      'needed)',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+
+        await tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(disableAnimations: true),
+            child: buildSubject(controller, config4),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField), 'lace');
+        await tester.tap(find.text('Submit'));
+        await tester.pump(); // exactly one frame, no pumpAndSettle
+
+        expect(find.text('You won!'), findsOneWidget);
+        expect(find.textContaining('LACE'), findsWidgets);
+      },
+    );
   });
 }

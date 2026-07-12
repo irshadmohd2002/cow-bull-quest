@@ -104,4 +104,19 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('renders without exceptions when animations are disabled', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(disableAnimations: true),
+        child: buildSubject(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Follow system'), findsOneWidget);
+  });
 }

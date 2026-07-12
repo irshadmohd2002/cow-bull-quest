@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_motion.dart';
+import '../../../theme/app_spacing.dart';
 import '../controllers/game_controller.dart';
 import '../controllers/game_controller_state.dart';
 import '../models/game_config.dart';
@@ -68,6 +70,12 @@ class _GameScreenState extends State<GameScreen> {
   final FocusNode _guessFocusNode = FocusNode();
   bool _submitting = false;
 
+  /// Bumped on every rejected submission, including ones whose message is
+  /// identical to the previous rejection. Used only to key the validation
+  /// banner's animation so a repeated identical rejection still visibly
+  /// flashes rather than silently no-opping.
+  int _rejectionSequence = 0;
+
   @override
   void initState() {
     super.initState();
@@ -96,15 +104,15 @@ class _GameScreenState extends State<GameScreen> {
     final text = rawText.trim();
     if (text.isEmpty) return;
 
-    _submitting = true;
+    setState(() => _submitting = true);
     widget.controller.submitGuess(text);
-    _submitting = false;
 
     final state = widget.controller.state;
     if (state is GameActive) {
       if (state.lastRejection == null) {
         _guessTextController.clear();
       } else {
+        _rejectionSequence++;
         _guessTextController.selection = TextSelection(
           baseOffset: 0,
           extentOffset: _guessTextController.text.length,
@@ -112,6 +120,7 @@ class _GameScreenState extends State<GameScreen> {
       }
       _guessFocusNode.requestFocus();
     }
+    setState(() => _submitting = false);
   }
 
   @override
@@ -125,7 +134,7 @@ class _GameScreenState extends State<GameScreen> {
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: ListenableBuilder(
             listenable: widget.controller,
             builder: (context, _) => _buildBody(widget.controller.state),
@@ -143,6 +152,9 @@ class _GameScreenState extends State<GameScreen> {
         guessTextController: _guessTextController,
         guessFocusNode: _guessFocusNode,
         wordLength: widget.config.wordLength,
+        difficultyLabel: _difficultyLabel(widget.config.difficulty),
+        submitEnabled: !_submitting,
+        rejectionSequence: _rejectionSequence,
         onSubmit: _handleSubmit,
       ),
       GameCompleted() => _CompletedGameView(
@@ -166,12 +178,15 @@ class _LoadingView extends StatelessWidget {
     return Center(
       child: Semantics(
         label: 'Loading game. Selecting a secret word.',
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Selecting a secret word...'),
+            const CircularProgressIndicator(),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Selecting a secret word...',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
           ],
         ),
       ),
@@ -185,6 +200,9 @@ class _ActiveGameView extends StatelessWidget {
     required this.guessTextController,
     required this.guessFocusNode,
     required this.wordLength,
+    required this.difficultyLabel,
+    required this.submitEnabled,
+    required this.rejectionSequence,
     required this.onSubmit,
   });
 
@@ -192,29 +210,105 @@ class _ActiveGameView extends StatelessWidget {
   final TextEditingController guessTextController;
   final FocusNode guessFocusNode;
   final int wordLength;
+  final String difficultyLabel;
+  final bool submitEnabled;
+  final int rejectionSequence;
   final ValueChanged<String> onSubmit;
 
   @override
   Widget build(BuildContext context) {
     final rejection = state.lastRejection;
+    final message = rejection == null
+        ? null
+        : _validationMessage(rejection, wordLength);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        GameStatusPanel(view: state.view),
-        const SizedBox(height: 16),
+        GameStatusPanel(view: state.view, difficultyLabel: difficultyLabel),
+        const SizedBox(height: AppSpacing.xs),
+        _ValidationBanner(message: message, sequence: rejectionSequence),
         Expanded(child: GuessHistory(guesses: state.view.guesses)),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.sm),
         GuessInput(
           controller: guessTextController,
           focusNode: guessFocusNode,
           wordLength: wordLength,
-          enabled: true,
-          errorText: rejection == null
-              ? null
-              : _validationMessage(rejection, wordLength),
+          enabled: submitEnabled,
+          hasError: rejection != null,
           onSubmit: onSubmit,
         ),
       ],
+    );
+  }
+}
+
+/// Shows the most recent validation failure, if any, as a prominent banner
+/// above the guess history.
+///
+/// The single accessible source for this message — its [Semantics] node is
+/// the only place the text is announced (the guess field itself carries no
+/// duplicate error text). [sequence] changes on every rejection, including
+/// consecutive identical ones, which changes this banner's [ValueKey] and
+/// so re-triggers the [AnimatedSwitcher] transition even when [message] is
+/// unchanged — otherwise a second, identical rejection would produce no
+/// visible change at all.
+class _ValidationBanner extends StatelessWidget {
+  const _ValidationBanner({required this.message, required this.sequence});
+
+  final String? message;
+  final int sequence;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final text = message;
+
+    return AnimatedSwitcher(
+      duration: AppMotion.durationFor(context, AppMotion.standard),
+      switchInCurve: AppMotion.curve,
+      child: text == null
+          ? const SizedBox.shrink(key: ValueKey('no-validation-error'))
+          : Padding(
+              key: ValueKey('validation-error-$sequence'),
+              padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+              child: Semantics(
+                liveRegion: true,
+                container: true,
+                label: text,
+                child: ExcludeSemantics(
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          color: colorScheme.onErrorContainer,
+                          size: 20,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            text,
+                            style: TextStyle(
+                              color: colorScheme.onErrorContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
     );
   }
 }
@@ -235,6 +329,9 @@ class _CompletedGameView extends StatelessWidget {
     final session = state.session;
     final won = session.status == GameStatus.won;
     final outcomeText = won ? 'You won!' : 'You lost';
+    final colorScheme = Theme.of(context).colorScheme;
+    final outcomeColor = won ? colorScheme.primary : colorScheme.error;
+    final outcomeIcon = won ? Icons.emoji_events : Icons.flag;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -243,36 +340,46 @@ class _CompletedGameView extends StatelessWidget {
           label:
               '$outcomeText. The secret word was ${session.secretWord}. '
               'Attempts used: ${session.attemptsUsed} of ${session.maxAttempts}.',
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(won ? Icons.emoji_events : Icons.flag),
-                      const SizedBox(width: 8),
-                      Text(
-                        outcomeText,
-                        style: Theme.of(context).textTheme.headlineSmall,
+          child: ExcludeSemantics(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  children: [
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.6, end: 1),
+                      duration: AppMotion.durationFor(
+                        context,
+                        AppMotion.standard,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Secret word: ${session.secretWord.toUpperCase()}'),
-                  Text(
-                    'Attempts used: ${session.attemptsUsed} / '
-                    '${session.maxAttempts}',
-                  ),
-                ],
+                      curve: Curves.easeOutBack,
+                      builder: (context, scale, child) =>
+                          Transform.scale(scale: scale, child: child),
+                      child: Icon(outcomeIcon, size: 40, color: outcomeColor),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      outcomeText,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'Secret word: ${session.secretWord.toUpperCase()}',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Text(
+                      'Attempts used: ${session.attemptsUsed} / '
+                      '${session.maxAttempts}',
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         Expanded(child: GuessHistory(guesses: session.guesses)),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         Row(
           children: [
             Expanded(
@@ -281,7 +388,7 @@ class _CompletedGameView extends StatelessWidget {
                 child: const Text('Return to Home'),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: FilledButton(
                 onPressed: onRestart,
@@ -306,17 +413,18 @@ class _StartupFailureView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 48),
-          const SizedBox(height: 16),
+          Icon(Icons.error_outline, size: 48, color: colorScheme.error),
+          const SizedBox(height: AppSpacing.lg),
           const Text(
             "We couldn't start the game. Please try again.",
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: AppSpacing.xl),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -324,7 +432,7 @@ class _StartupFailureView extends StatelessWidget {
                 onPressed: onReturnHome,
                 child: const Text('Return to Home'),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               FilledButton(onPressed: onRetry, child: const Text('Retry')),
             ],
           ),

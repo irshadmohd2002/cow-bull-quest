@@ -292,4 +292,64 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'the word-length summary updates when a different length is selected',
+    (tester) async {
+      await tester.pumpWidget(buildSubject((_, _) {}));
+      expect(find.textContaining("guess a 4-letter"), findsOneWidget);
+
+      await tester.tap(find.text('6 letters'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining("guess a 4-letter"), findsNothing);
+      expect(find.textContaining("guess a 6-letter"), findsOneWidget);
+    },
+  );
+
+  testWidgets('Start Game has a minimum accessible tap target height', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildSubject((_, _) {}));
+
+    final size = tester.getSize(
+      find.widgetWithText(FilledButton, 'Start Game'),
+    );
+    expect(size.height, greaterThanOrEqualTo(44));
+  });
+
+  group('reduced motion', () {
+    testWidgets('renders without exceptions when animations are disabled', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: buildSubject((_, _) {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'the word-length summary reaches its final text after a single frame '
+      '(no settling needed)',
+      (tester) async {
+        await tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(disableAnimations: true),
+            child: buildSubject((_, _) {}),
+          ),
+        );
+
+        await tester.tap(find.text('6 letters'));
+        await tester.pump(); // exactly one frame, no pumpAndSettle
+
+        expect(find.textContaining('guess a 6-letter'), findsOneWidget);
+        expect(find.textContaining('guess a 4-letter'), findsNothing);
+      },
+    );
+  });
 }

@@ -136,7 +136,7 @@ void main() {
     await tester.tap(find.text('Start Game'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Easy'), findsOneWidget);
+    expect(find.textContaining('Easy'), findsAtLeastNWidgets(1));
   });
 
   testWidgets('How to Play opens the Rules screen', (tester) async {

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_spacing.dart';
+
 /// Explains how Bulls & Cows is played.
 ///
 /// Purely presentational and feature-local: it imports nothing from the
@@ -19,85 +21,120 @@ class RulesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
     final sortedLengths = attemptLimitsByWordLength.keys.toList()..sort();
 
     return Scaffold(
       appBar: AppBar(title: const Text('How to Play')),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppSpacing.screenPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('How to Play', style: textTheme.headlineMedium),
-              const SizedBox(height: 16),
-              const Text(
+              Semantics(
+                header: true,
+                child: Text(
+                  'How to Play',
+                  style: textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
                 'You guess a secret English word. After each guess, you '
                 'are told how many letters you got right.',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: AppSpacing.xl),
+              _SectionHeading('Scoring'),
+              const SizedBox(height: AppSpacing.sm),
               const _RuleItem(
+                icon: Icons.gps_fixed,
                 heading: 'Bulls',
                 explanation:
                     'A bull is a letter that is correct and in the right '
                     'position.',
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.md),
               const _RuleItem(
+                icon: Icons.sync_alt,
                 heading: 'Cows',
                 explanation:
                     'A cow is a letter that is correct but in the wrong '
                     'position.',
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.md),
               const _RuleItem(
+                icon: Icons.content_copy,
                 heading: 'Duplicate letters',
                 explanation:
                     'A letter can never be counted more times than it '
                     'appears in the secret word, even if your guess repeats '
                     'it more often.',
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.md),
               const _RuleItem(
+                icon: Icons.block,
                 heading: 'Invalid guesses',
                 explanation:
                     'A guess that is blank, the wrong length, or contains '
                     'anything other than letters is rejected and does not '
                     'use up an attempt.',
               ),
-              const SizedBox(height: 24),
-              Text('Difficulty', style: textTheme.titleMedium),
-              const SizedBox(height: 8),
-              const Text(
+              const SizedBox(height: AppSpacing.xl),
+              _SectionHeading('Difficulty'),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
                 'Difficulty only changes which secret words the game can '
                 'pick from — it never changes scoring or attempt limits.',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.md),
               const _RuleItem(
+                icon: Icons.sentiment_satisfied_alt,
                 heading: 'Easy',
                 explanation: 'Familiar, high-frequency words.',
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.md),
               const _RuleItem(
+                icon: Icons.balance,
                 heading: 'Common',
                 explanation: 'Broader everyday vocabulary.',
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.md),
               const _RuleItem(
+                icon: Icons.local_fire_department,
                 heading: 'Hard',
                 explanation: 'Less frequent words.',
               ),
-              const SizedBox(height: 24),
-              Text('Attempt limits', style: textTheme.titleMedium),
-              const SizedBox(height: 8),
-              for (final wordLength in sortedLengths)
-                Text(
-                  '$wordLength letters: '
-                  '${attemptLimitsByWordLength[wordLength]} attempts',
+              const SizedBox(height: AppSpacing.xl),
+              _SectionHeading('Attempt limits'),
+              const SizedBox(height: AppSpacing.sm),
+              Semantics(
+                container: true,
+                child: Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: [
+                    for (final wordLength in sortedLengths)
+                      Chip(
+                        label: Text(
+                          '$wordLength letters: '
+                          '${attemptLimitsByWordLength[wordLength]} attempts',
+                        ),
+                      ),
+                  ],
                 ),
-              const SizedBox(height: 24),
-              Text('Examples', style: textTheme.titleMedium),
-              const SizedBox(height: 12),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              _SectionHeading('Examples'),
+              const SizedBox(height: AppSpacing.md),
               const _RuleExample(
                 secretWord: 'APPLE',
                 guessWord: 'AMPLE',
@@ -108,7 +145,7 @@ class RulesScreen extends StatelessWidget {
                     'bulls. The guess\'s M does not appear anywhere in '
                     'APPLE, so there are 0 cows.',
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               const _RuleExample(
                 secretWord: 'SPEED',
                 guessWord: 'EERIE',
@@ -128,23 +165,53 @@ class RulesScreen extends StatelessWidget {
   }
 }
 
-class _RuleItem extends StatelessWidget {
-  const _RuleItem({required this.heading, required this.explanation});
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading(this.text);
 
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      header: true,
+      child: Text(text, style: Theme.of(context).textTheme.titleLarge),
+    );
+  }
+}
+
+class _RuleItem extends StatelessWidget {
+  const _RuleItem({
+    required this.icon,
+    required this.heading,
+    required this.explanation,
+  });
+
+  final IconData icon;
   final String heading;
   final String explanation;
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Semantics(
+      excludeSemantics: true,
       container: true,
       label: '$heading: $explanation',
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(heading, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(explanation),
+          Icon(icon, color: colorScheme.primary),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(heading, style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: AppSpacing.xs),
+                Text(explanation),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -172,24 +239,25 @@ class _RuleExample extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
+      excludeSemantics: true,
       container: true,
       label:
           'Example: secret word $secretWord, guess $guessWord. '
           'Result: $bulls bulls, $cows cows. $explanation',
       child: Card(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Secret: $secretWord'),
               Text('Guess: $guessWord'),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               Text(
                 'Bulls: $bulls   Cows: $cows',
                 style: Theme.of(context).textTheme.titleSmall,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               Text(explanation),
             ],
           ),

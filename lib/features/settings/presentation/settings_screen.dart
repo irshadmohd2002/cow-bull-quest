@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app_settings.dart';
+import '../../../theme/app_spacing.dart';
 
 /// Lets the player choose the app's theme preference.
 ///
@@ -29,8 +30,17 @@ class SettingsScreen extends StatelessWidget {
     AppThemePreference.dark: 'Dark',
   };
 
+  static const Map<AppThemePreference, String> _descriptions = {
+    AppThemePreference.system: "Match your device's current appearance.",
+    AppThemePreference.light: 'Always use the light appearance.',
+    AppThemePreference.dark: 'Always use the dark appearance.',
+  };
+
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: SafeArea(
@@ -44,16 +54,43 @@ class SettingsScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.screenPadding,
+                    AppSpacing.screenPadding,
+                    AppSpacing.screenPadding,
+                    AppSpacing.xs,
+                  ),
+                  child: Semantics(
+                    header: true,
+                    child: Text('Theme', style: textTheme.titleMedium),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.screenPadding,
+                    0,
+                    AppSpacing.screenPadding,
+                    AppSpacing.md,
+                  ),
                   child: Text(
-                    'Theme',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    'Choose how Bulls & Cows looks on this device.',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
                 for (final preference in AppThemePreference.values)
                   RadioListTile<AppThemePreference>(
                     title: Text(_labels[preference]!),
+                    // Excluded from semantics so the announced label stays
+                    // the concise option name — the fuller description is a
+                    // sighted-only visual aid, not additional information a
+                    // screen-reader user needs repeated on every option.
+                    subtitle: ExcludeSemantics(
+                      child: Text(_descriptions[preference]!),
+                    ),
                     value: preference,
+                    selected: preference == themePreference,
                   ),
               ],
             ),

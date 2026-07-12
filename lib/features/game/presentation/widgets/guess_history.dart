@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../theme/app_spacing.dart';
 import '../../models/guess.dart';
 import 'guess_history_tile.dart';
 
@@ -17,14 +18,36 @@ class GuessHistory extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (guesses.isEmpty) {
-      return const Center(
-        child: Text('No guesses yet. Make your first guess!'),
+      final colorScheme = Theme.of(context).colorScheme;
+      return Center(
+        child: Semantics(
+          excludeSemantics: true,
+          label: 'No guesses yet. Make your first guess.',
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.history_edu_outlined,
+                size: 40,
+                color: colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'No guesses yet. Make your first guess!',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
     final newestFirst = guesses.reversed.toList();
-    return ListView.builder(
+    return ListView.separated(
       itemCount: newestFirst.length,
+      separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) =>
           GuessHistoryTile(guess: newestFirst[index]),
     );
