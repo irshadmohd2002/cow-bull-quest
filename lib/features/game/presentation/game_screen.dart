@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../controllers/game_controller.dart';
 import '../controllers/game_controller_state.dart';
 import '../models/game_config.dart';
+import '../models/game_difficulty.dart';
 import '../models/game_status.dart';
 import '../services/guess_validator.dart';
 import 'widgets/game_status_panel.dart';
@@ -29,6 +30,16 @@ String _validationMessage(GuessValidationFailure reason, int wordLength) {
       return 'This game has already ended.';
   }
 }
+
+/// Maps a [GameDifficulty] to concise, human-facing text.
+///
+/// Deliberately lives here, in the presentation layer, rather than on the
+/// domain enum itself — the domain layer only ever exposes typed values.
+String _difficultyLabel(GameDifficulty difficulty) => switch (difficulty) {
+  GameDifficulty.easy => 'Easy',
+  GameDifficulty.common => 'Common',
+  GameDifficulty.hard => 'Hard',
+};
 
 /// The gameplay screen: shows the active session, accepts guesses, and
 /// shows the win/loss outcome.
@@ -107,7 +118,10 @@ class _GameScreenState extends State<GameScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Bulls & Cows · ${widget.config.wordLength} letters'),
+        title: Text(
+          'Bulls & Cows · ${widget.config.wordLength} letters · '
+          '${_difficultyLabel(widget.config.difficulty)}',
+        ),
       ),
       body: SafeArea(
         child: Padding(

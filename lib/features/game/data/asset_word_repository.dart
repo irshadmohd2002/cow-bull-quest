@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/services.dart' show AssetBundle, rootBundle;
 
 import '../../../core/exceptions.dart';
+import '../models/game_difficulty.dart';
 import 'word_list_parser.dart';
 import 'word_repository.dart';
 
@@ -43,10 +44,12 @@ typedef AssetStringLoader = Future<String> Function(String assetPath);
 /// [WordRepository] backed by the generated text assets under
 /// `assets/generated/`. Never reads `assets/source/` at runtime.
 ///
-/// Parsed lists are cached in memory per word length so each asset is read
-/// and parsed at most once; the allowed-word and secret-word caches are
-/// kept as separate maps so a length being cached for one never masks the
-/// other. A third cache, [_allowedSetCache], holds a [Set] built from the
+/// Parsed lists are cached in memory: the allowed-word cache is keyed by
+/// word length alone, since allowed-guess validation is difficulty
+/// independent, while the secret-word cache is keyed by the `(wordLength,
+/// difficulty)` pair, so each of the nine secret-word assets is read and
+/// parsed at most once and no two difficulty pools ever collide in cache. A
+/// third cache, [_allowedSetCache], holds a [Set] built from the
 /// already-parsed allowed list purely to make [isAllowed] a Set lookup
 /// instead of a linear scan — it never performs its own asset load; it
 /// always goes through (and therefore shares the cache of)
@@ -71,24 +74,42 @@ class AssetWordRepository implements WordRepository {
   final Random _random;
 
   final Map<int, List<String>> _allowedCache = {};
-  final Map<int, List<String>> _secretCache = {};
+  final Map<(int, GameDifficulty), List<String>> _secretCache = {};
   final Map<int, Set<String>> _allowedSetCache = {};
 
   @override
-  Future<List<String>> loadAllowedWords(int wordLength) => _loadCached(
-    cache: _allowedCache,
-    wordLength: wordLength,
-    assetPath: _allowedAssetPath(wordLength),
-    kind: 'allowed',
-  );
+  Future<List<String>> loadAllowedWords(int wordLength) async {
+    _validateSupportedLength(wordLength);
+    final cached = _allowedCache[wordLength];
+    if (cached != null) return cached;
+
+    final words = await _loadWordList(
+      assetPath: _allowedAssetPath(wordLength),
+      wordLength: wordLength,
+      kind: 'allowed',
+    );
+    _allowedCache[wordLength] = words;
+    return words;
+  }
 
   @override
-  Future<List<String>> loadSecretWords(int wordLength) => _loadCached(
-    cache: _secretCache,
-    wordLength: wordLength,
-    assetPath: _secretAssetPath(wordLength),
-    kind: 'secret',
-  );
+  Future<List<String>> loadSecretWords(
+    int wordLength,
+    GameDifficulty difficulty,
+  ) async {
+    _validateSupportedLength(wordLength);
+    final cacheKey = (wordLength, difficulty);
+    final cached = _secretCache[cacheKey];
+    if (cached != null) return cached;
+
+    final words = await _loadWordList(
+      assetPath: _secretAssetPath(wordLength, difficulty),
+      wordLength: wordLength,
+      kind: 'secret (${difficulty.name})',
+    );
+    _secretCache[cacheKey] = words;
+    return words;
+  }
 
   @override
   Future<bool> isAllowed(String word, int wordLength) async {
@@ -97,8 +118,11 @@ class AssetWordRepository implements WordRepository {
   }
 
   @override
-  Future<String> selectSecretWord(int wordLength) async {
-    final secrets = await loadSecretWords(wordLength);
+  Future<String> selectSecretWord(
+    int wordLength,
+    GameDifficulty difficulty,
+  ) async {
+    final secrets = await loadSecretWords(wordLength, difficulty);
     return secrets[_random.nextInt(secrets.length)];
   }
 
@@ -116,16 +140,11 @@ class AssetWordRepository implements WordRepository {
     return set;
   }
 
-  Future<List<String>> _loadCached({
-    required Map<int, List<String>> cache,
-    required int wordLength,
+  Future<List<String>> _loadWordList({
     required String assetPath,
+    required int wordLength,
     required String kind,
   }) async {
-    _validateSupportedLength(wordLength);
-    final cached = cache[wordLength];
-    if (cached != null) return cached;
-
     final String contents;
     try {
       contents = await _loadAssetString(assetPath);
@@ -144,15 +163,14 @@ class AssetWordRepository implements WordRepository {
     if (words.isEmpty) {
       throw EmptyWordListException('$kind word list at $assetPath is empty');
     }
-    cache[wordLength] = words;
     return words;
   }
 
   static String _allowedAssetPath(int wordLength) =>
       '$_generatedAssetDir/allowed_words_$wordLength.txt';
 
-  static String _secretAssetPath(int wordLength) =>
-      '$_generatedAssetDir/secret_words_$wordLength.txt';
+  static String _secretAssetPath(int wordLength, GameDifficulty difficulty) =>
+      '$_generatedAssetDir/secret_words_${difficulty.name}_$wordLength.txt';
 
   static void _validateSupportedLength(int wordLength) {
     if (!WordRepository.supportedLengths.contains(wordLength)) {

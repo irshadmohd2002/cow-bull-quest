@@ -53,7 +53,11 @@ lib/
               sequencing, etc.) stay feature-local under features/game/
               unless they become genuinely reusable elsewhere.
   models/     shared plain data classes used by 2+ features. No Flutter
-              imports. Empty until something is actually shared.
+              imports. Empty until something is actually shared — e.g.
+              DifficultyOption, which the home feature exposes as a
+              difficulty selection and the app-level composition root maps
+              onto the game feature's own GameDifficulty, so home never has
+              to import the game feature just to offer a difficulty choice.
   services/   shared business logic used by 2+ features, as plain Dart
               classes. Depends on shared models/core and on repositories
               exposed by data/ — never does file/asset I/O directly, never

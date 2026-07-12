@@ -5,12 +5,23 @@ import 'features/game/controllers/game_controller.dart';
 import 'features/game/data/asset_word_repository.dart';
 import 'features/game/data/word_repository.dart';
 import 'features/game/models/game_config.dart';
+import 'features/game/models/game_difficulty.dart';
 import 'features/game/presentation/game_screen.dart';
 import 'features/game/services/game_engine.dart';
 import 'features/home/presentation/home_screen.dart';
 import 'features/rules/presentation/rules_screen.dart';
 import 'features/settings/presentation/settings_screen.dart';
+import 'models/difficulty_selection.dart';
 import 'theme/app_theme.dart';
+
+/// Maps the `home` feature's neutral [DifficultyOption] onto the `game`
+/// feature's own [GameDifficulty]. This composition root is the only place
+/// that needs to know both types exist.
+GameDifficulty _toGameDifficulty(DifficultyOption option) => switch (option) {
+  DifficultyOption.easy => GameDifficulty.easy,
+  DifficultyOption.common => GameDifficulty.common,
+  DifficultyOption.hard => GameDifficulty.hard,
+};
 
 /// The app's composition root.
 ///
@@ -52,9 +63,16 @@ class _CowBullAppState extends State<CowBullApp> {
   /// length. Read from [GameConfig] only here — the app-level composition
   /// root — and handed to [RulesScreen] as a presentation-neutral map, so
   /// the `rules` feature never needs to import `GameConfig` itself.
+  ///
+  /// [maxAttempts] depends only on word length, never difficulty (see
+  /// [GameConfig]), so the difficulty passed here to satisfy
+  /// [GameConfig.forSelection]'s required parameter is arbitrary.
   static final Map<int, int> _attemptLimitsByWordLength = {
     for (final wordLength in const [4, 5, 6])
-      wordLength: GameConfig.forWordLength(wordLength).maxAttempts,
+      wordLength: GameConfig.forSelection(
+        wordLength: wordLength,
+        difficulty: GameDifficulty.common,
+      ).maxAttempts,
   };
 
   /// The settings instance actually in use — either [CowBullApp.settings]
@@ -88,17 +106,24 @@ class _CowBullAppState extends State<CowBullApp> {
     super.dispose();
   }
 
-  /// Turns the word length [HomeScreen] hands back into a [GameConfig] —
-  /// the only place that happens, since [HomeScreen] itself never imports
-  /// the `game` feature — then pushes [GameScreen] with a freshly created
-  /// [GameController]. A [GameController] is created only here, at the
-  /// moment a game actually starts, and is owned and disposed exactly once
-  /// by [GameScreen] itself.
-  void _startGame(BuildContext context, int wordLength) {
+  /// Turns the word length and difficulty [HomeScreen] hands back into a
+  /// [GameConfig] — the only place that happens, since [HomeScreen] itself
+  /// never imports the `game` feature — then pushes [GameScreen] with a
+  /// freshly created [GameController]. A [GameController] is created only
+  /// here, at the moment a game actually starts, and is owned and disposed
+  /// exactly once by [GameScreen] itself.
+  void _startGame(
+    BuildContext context,
+    int wordLength,
+    DifficultyOption difficulty,
+  ) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => GameScreen(
-          config: GameConfig.forWordLength(wordLength),
+          config: GameConfig.forSelection(
+            wordLength: wordLength,
+            difficulty: _toGameDifficulty(difficulty),
+          ),
           controller: GameController(
             wordRepository: widget.wordRepository,
             gameEngine: _gameEngine,
@@ -142,7 +167,8 @@ class _CowBullAppState extends State<CowBullApp> {
         themeMode: _settings.themeMode,
         home: Builder(
           builder: (context) => HomeScreen(
-            onStartGame: (wordLength) => _startGame(context, wordLength),
+            onStartGame: (wordLength, difficulty) =>
+                _startGame(context, wordLength, difficulty),
             onOpenRules: () => _openRules(context),
             onOpenSettings: () => _openSettings(context),
           ),

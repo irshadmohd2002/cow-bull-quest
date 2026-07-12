@@ -1,18 +1,27 @@
 import 'package:cowbullgame/app.dart';
 import 'package:cowbullgame/app_settings.dart';
 import 'package:cowbullgame/features/game/data/word_repository.dart';
+import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A minimal [WordRepository] fake so app-level navigation can be exercised
-/// without touching the real bundled word-list assets.
+/// without touching the real bundled word-list assets. [wordsByLength] is
+/// keyed by word length only, since these app-navigation tests don't need
+/// to distinguish difficulty pools — cross-difficulty behavior is covered
+/// by `asset_word_repository_test.dart` and `game_controller_test.dart`.
 class _FakeWordRepository implements WordRepository {
   final Map<int, String> wordsByLength = {};
   final List<int> requestedLengths = [];
+  final List<GameDifficulty> requestedDifficulties = [];
 
   @override
-  Future<String> selectSecretWord(int wordLength) async {
+  Future<String> selectSecretWord(
+    int wordLength,
+    GameDifficulty difficulty,
+  ) async {
     requestedLengths.add(wordLength);
+    requestedDifficulties.add(difficulty);
     final word = wordsByLength[wordLength];
     if (word == null) {
       throw StateError('no fake secret word registered for length $wordLength');
@@ -24,7 +33,10 @@ class _FakeWordRepository implements WordRepository {
   Future<List<String>> loadAllowedWords(int wordLength) async => const [];
 
   @override
-  Future<List<String>> loadSecretWords(int wordLength) async => const [];
+  Future<List<String>> loadSecretWords(
+    int wordLength,
+    GameDifficulty difficulty,
+  ) async => const [];
 
   @override
   Future<bool> isAllowed(String word, int wordLength) async => true;
@@ -71,11 +83,12 @@ void main() {
     await tester.pumpWidget(CowBullApp(wordRepository: repo));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Start Game'));
     await tester.tap(find.text('Start Game'));
     await tester.pumpAndSettle();
 
     expect(find.text('Start Game'), findsNothing);
-    expect(find.text('Bulls & Cows · 4 letters'), findsOneWidget);
+    expect(find.textContaining('Bulls & Cows · 4 letters'), findsOneWidget);
   });
 
   testWidgets('starting a game uses the correct GameConfig for the '
@@ -86,18 +99,51 @@ void main() {
 
     await tester.tap(find.text('6 letters'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Start Game'));
     await tester.tap(find.text('Start Game'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Bulls & Cows · 6 letters'), findsOneWidget);
-    // Attempts limit for 6-letter games (GameConfig.forWordLength(6)).
+    expect(find.textContaining('Bulls & Cows · 6 letters'), findsOneWidget);
+    // Attempts limit for 6-letter games (GameConfig.forSelection).
     expect(find.textContaining('20'), findsWidgets);
+  });
+
+  testWidgets('starting a game uses the correct GameConfig for the '
+      'selected difficulty', (tester) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    await tester.pumpWidget(CowBullApp(wordRepository: repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Hard'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Start Game'));
+    await tester.tap(find.text('Start Game'));
+    await tester.pumpAndSettle();
+
+    expect(repo.requestedDifficulties, [GameDifficulty.hard]);
+  });
+
+  testWidgets('the game screen displays the selected difficulty', (
+    tester,
+  ) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    await tester.pumpWidget(CowBullApp(wordRepository: repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Easy'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Start Game'));
+    await tester.tap(find.text('Start Game'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Easy'), findsOneWidget);
   });
 
   testWidgets('How to Play opens the Rules screen', (tester) async {
     await tester.pumpWidget(CowBullApp(wordRepository: _FakeWordRepository()));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('How to Play'));
     await tester.tap(find.text('How to Play'));
     await tester.pumpAndSettle();
 
@@ -109,6 +155,7 @@ void main() {
     await tester.pumpWidget(CowBullApp(wordRepository: _FakeWordRepository()));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Settings'));
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
 
@@ -121,6 +168,7 @@ void main() {
     await tester.pumpWidget(CowBullApp(wordRepository: _FakeWordRepository()));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('How to Play'));
     await tester.tap(find.text('How to Play'));
     await tester.pumpAndSettle();
     await tester.pageBack();
@@ -133,6 +181,7 @@ void main() {
     await tester.pumpWidget(CowBullApp(wordRepository: _FakeWordRepository()));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Settings'));
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     await tester.pageBack();
@@ -150,6 +199,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Settings'));
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Dark'));
@@ -166,6 +216,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Settings'));
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Dark'));
@@ -188,6 +239,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Settings'));
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Dark'));
@@ -195,10 +247,11 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Start Game'));
     await tester.tap(find.text('Start Game'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Bulls & Cows · 4 letters'), findsOneWidget);
+    expect(find.textContaining('Bulls & Cows · 4 letters'), findsOneWidget);
   });
 
   testWidgets('opening Rules does not construct a GameController', (
@@ -208,6 +261,7 @@ void main() {
     await tester.pumpWidget(CowBullApp(wordRepository: repo));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('How to Play'));
     await tester.tap(find.text('How to Play'));
     await tester.pumpAndSettle();
 
@@ -221,6 +275,7 @@ void main() {
     await tester.pumpWidget(CowBullApp(wordRepository: repo));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Settings'));
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
 
@@ -237,6 +292,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        await tester.ensureVisible(find.text('Settings'));
         await tester.tap(find.text('Settings'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Dark'));

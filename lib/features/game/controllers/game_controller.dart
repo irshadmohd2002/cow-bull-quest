@@ -79,6 +79,7 @@ class GameController extends ChangeNotifier {
     try {
       final secretWord = await _wordRepository.selectSecretWord(
         config.wordLength,
+        config.difficulty,
       );
       final session = _gameEngine.startGame(
         secretWord: secretWord,

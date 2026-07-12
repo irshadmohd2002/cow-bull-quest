@@ -61,6 +61,31 @@ void main() {
     expect(find.textContaining('6 letters: 20 attempts'), findsOneWidget);
   });
 
+  group('difficulty explanations', () {
+    testWidgets('shows all three difficulty headings', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.text('Easy'), findsOneWidget);
+      expect(find.text('Common'), findsOneWidget);
+      expect(find.text('Hard'), findsOneWidget);
+    });
+
+    testWidgets('explains each difficulty tier', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.textContaining('high-frequency words'), findsOneWidget);
+      expect(find.textContaining('everyday vocabulary'), findsOneWidget);
+      expect(find.textContaining('Less frequent words'), findsOneWidget);
+    });
+
+    testWidgets('clarifies difficulty only changes word selection, not attempt '
+        'limits or scoring', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(
+        find.textContaining('never changes scoring or attempt limits'),
+        findsOneWidget,
+      );
+    });
+  });
+
   testWidgets('renders both worked examples', (tester) async {
     await tester.pumpWidget(buildSubject());
     expect(find.text('Secret: APPLE'), findsOneWidget);

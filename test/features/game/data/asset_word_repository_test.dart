@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:cowbullgame/features/game/data/asset_word_repository.dart';
 import 'package:cowbullgame/features/game/data/word_list_parser.dart';
 import 'package:cowbullgame/features/game/data/word_repository.dart';
+import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Records every asset path requested and serves canned contents, so tests
@@ -52,19 +53,25 @@ class _FixedRandom implements Random {
 
 void main() {
   const allowed5Path = 'assets/generated/allowed_words_5.txt';
-  const secret5Path = 'assets/generated/secret_words_5.txt';
   const allowed4Path = 'assets/generated/allowed_words_4.txt';
-  const secret4Path = 'assets/generated/secret_words_4.txt';
   const allowed6Path = 'assets/generated/allowed_words_6.txt';
-  const secret6Path = 'assets/generated/secret_words_6.txt';
+
+  String secretPath(int length, GameDifficulty difficulty) =>
+      'assets/generated/secret_words_${difficulty.name}_$length.txt';
 
   _FakeAssetLoader defaultLoader() => _FakeAssetLoader({
-    allowed5Path: 'apple\nbread\ncrane\nzesty\n',
-    secret5Path: 'apple\nbread\ncrane\n',
-    allowed4Path: 'lace\nrace\ntace\n',
-    secret4Path: 'lace\nrace\n',
-    allowed6Path: 'garden\nmarble\nplanet\n',
-    secret6Path: 'garden\nmarble\n',
+    allowed5Path: 'apple\nbread\ncrane\nswift\nzesty\n',
+    secretPath(5, GameDifficulty.easy): 'apple\n',
+    secretPath(5, GameDifficulty.common): 'bread\ncrane\n',
+    secretPath(5, GameDifficulty.hard): 'swift\n',
+    allowed4Path: 'lace\nrace\ntace\nvace\n',
+    secretPath(4, GameDifficulty.easy): 'lace\n',
+    secretPath(4, GameDifficulty.common): 'race\n',
+    secretPath(4, GameDifficulty.hard): 'tace\n',
+    allowed6Path: 'garden\nmarble\nplanet\nturtle\n',
+    secretPath(6, GameDifficulty.easy): 'garden\n',
+    secretPath(6, GameDifficulty.common): 'marble\n',
+    secretPath(6, GameDifficulty.hard): 'planet\n',
   });
 
   group('AssetWordRepository asset paths', () {
@@ -80,16 +87,23 @@ void main() {
       );
     });
 
-    test('requests the correct secret-word asset path per length', () async {
+    test('requests the correct secret-word asset path for every length/'
+        'difficulty pair', () async {
       final loader = defaultLoader();
       final repo = AssetWordRepository(assetLoader: loader.call);
-      await repo.loadSecretWords(4);
-      await repo.loadSecretWords(5);
-      await repo.loadSecretWords(6);
-      expect(
-        loader.requestedPaths,
-        containsAll([secret4Path, secret5Path, secret6Path]),
-      );
+      for (final length in WordRepository.supportedLengths) {
+        for (final difficulty in GameDifficulty.values) {
+          await repo.loadSecretWords(length, difficulty);
+        }
+      }
+      for (final length in WordRepository.supportedLengths) {
+        for (final difficulty in GameDifficulty.values) {
+          expect(
+            loader.requestedPaths,
+            contains(secretPath(length, difficulty)),
+          );
+        }
+      }
     });
   });
 
@@ -97,20 +111,28 @@ void main() {
     test('loads and parses the allowed-word list', () async {
       final repo = AssetWordRepository(assetLoader: defaultLoader().call);
       final words = await repo.loadAllowedWords(5);
-      expect(words, ['apple', 'bread', 'crane', 'zesty']);
+      expect(words, ['apple', 'bread', 'crane', 'swift', 'zesty']);
     });
 
-    test('loads and parses the secret-word list', () async {
-      final repo = AssetWordRepository(assetLoader: defaultLoader().call);
-      final words = await repo.loadSecretWords(5);
-      expect(words, ['apple', 'bread', 'crane']);
-    });
+    test(
+      'loads and parses the secret-word list for a given difficulty',
+      () async {
+        final repo = AssetWordRepository(assetLoader: defaultLoader().call);
+        final words = await repo.loadSecretWords(5, GameDifficulty.common);
+        expect(words, ['bread', 'crane']);
+      },
+    );
 
-    test('accepts every supported length', () async {
+    test('accepts every supported length for every difficulty', () async {
       final repo = AssetWordRepository(assetLoader: defaultLoader().call);
       for (final length in WordRepository.supportedLengths) {
         await expectLater(repo.loadAllowedWords(length), completes);
-        await expectLater(repo.loadSecretWords(length), completes);
+        for (final difficulty in GameDifficulty.values) {
+          await expectLater(
+            repo.loadSecretWords(length, difficulty),
+            completes,
+          );
+        }
       }
     });
 
@@ -121,7 +143,7 @@ void main() {
         throwsA(isA<UnsupportedWordLengthException>()),
       );
       expect(
-        () => repo.loadSecretWords(7),
+        () => repo.loadSecretWords(7, GameDifficulty.easy),
         throwsA(isA<UnsupportedWordLengthException>()),
       );
       expect(
@@ -129,7 +151,7 @@ void main() {
         throwsA(isA<UnsupportedWordLengthException>()),
       );
       expect(
-        () => repo.selectSecretWord(3),
+        () => repo.selectSecretWord(3, GameDifficulty.easy),
         throwsA(isA<UnsupportedWordLengthException>()),
       );
     });
@@ -149,6 +171,16 @@ void main() {
     test('returns false for an invalid guess', () async {
       final repo = AssetWordRepository(assetLoader: defaultLoader().call);
       expect(await repo.isAllowed('zzzzz', 5), isFalse);
+    });
+
+    test('membership lookup is unaffected by difficulty: it never loads a '
+        'secret asset', () async {
+      final loader = defaultLoader();
+      final repo = AssetWordRepository(assetLoader: loader.call);
+      expect(await repo.isAllowed('zesty', 5), isTrue);
+      expect(loader.requestCountFor(secretPath(5, GameDifficulty.easy)), 0);
+      expect(loader.requestCountFor(secretPath(5, GameDifficulty.common)), 0);
+      expect(loader.requestCountFor(secretPath(5, GameDifficulty.hard)), 0);
     });
   });
 
@@ -171,7 +203,7 @@ void main() {
         final repo = AssetWordRepository(assetLoader: loader.call);
         expect(await repo.isAllowed('crane', 5), isTrue);
         final words = await repo.loadAllowedWords(5);
-        expect(words, ['apple', 'bread', 'crane', 'zesty']);
+        expect(words, ['apple', 'bread', 'crane', 'swift', 'zesty']);
         expect(loader.requestCountFor(allowed5Path), 1);
       },
     );
@@ -189,7 +221,7 @@ void main() {
         'its membership cache', () async {
       final loader = defaultLoader();
       final repo = AssetWordRepository(assetLoader: loader.call);
-      await repo.loadSecretWords(5);
+      await repo.loadSecretWords(5, GameDifficulty.common);
       expect(loader.requestCountFor(allowed5Path), 0);
 
       // Membership lookups still work correctly afterwards, and trigger
@@ -200,30 +232,19 @@ void main() {
   });
 
   group('AssetWordRepository secret selection', () {
-    test(
-      'selects only from the secret-word list, never allowed-only words',
-      () async {
-        // allowed_words_5 contains "zesty", which is not in secret_words_5.
-        final secrets = await AssetWordRepository(
-          assetLoader: defaultLoader().call,
-        ).loadSecretWords(5);
-        for (var i = 0; i < secrets.length; i++) {
-          final picked = await AssetWordRepository(
-            assetLoader: defaultLoader().call,
-            random: _FixedRandom(i),
-          ).selectSecretWord(5);
-          expect(secrets, contains(picked));
-          expect(picked, isNot('zesty'));
-        }
-      },
-    );
+    test('selects only from the requested difficulty pool, never another '
+        "difficulty's words", () async {
+      final repo = AssetWordRepository(assetLoader: defaultLoader().call);
+      expect(await repo.selectSecretWord(5, GameDifficulty.easy), 'apple');
+      expect(await repo.selectSecretWord(5, GameDifficulty.hard), 'swift');
+    });
 
     test('a fixed injected Random always selects the same index', () async {
       final repo = AssetWordRepository(
         assetLoader: defaultLoader().call,
         random: _FixedRandom(1),
       );
-      expect(await repo.selectSecretWord(5), 'bread');
+      expect(await repo.selectSecretWord(5, GameDifficulty.common), 'crane');
     });
 
     test(
@@ -238,8 +259,8 @@ void main() {
           random: Random(1234),
         );
         expect(
-          await repoA.selectSecretWord(5),
-          await repoB.selectSecretWord(5),
+          await repoA.selectSecretWord(5, GameDifficulty.common),
+          await repoB.selectSecretWord(5, GameDifficulty.common),
         );
       },
     );
@@ -247,7 +268,7 @@ void main() {
 
   group('AssetWordRepository content error handling', () {
     test('throws EmptyWordListException for an empty generated list', () async {
-      final loader = _FakeAssetLoader({allowed5Path: '', secret5Path: ''});
+      final loader = _FakeAssetLoader({allowed5Path: ''});
       final repo = AssetWordRepository(assetLoader: loader.call);
       expect(
         () => repo.loadAllowedWords(5),
@@ -256,12 +277,23 @@ void main() {
     });
 
     test(
-      'throws WordListFormatException for malformed generated content',
+      'throws EmptyWordListException for an empty difficulty pool',
       () async {
         final loader = _FakeAssetLoader({
-          allowed5Path: 'crane\ncr4ne\n',
-          secret5Path: 'crane\n',
+          secretPath(5, GameDifficulty.hard): '',
         });
+        final repo = AssetWordRepository(assetLoader: loader.call);
+        expect(
+          () => repo.loadSecretWords(5, GameDifficulty.hard),
+          throwsA(isA<EmptyWordListException>()),
+        );
+      },
+    );
+
+    test(
+      'throws WordListFormatException for malformed generated content',
+      () async {
+        final loader = _FakeAssetLoader({allowed5Path: 'crane\ncr4ne\n'});
         final repo = AssetWordRepository(assetLoader: loader.call);
         expect(
           () => repo.loadAllowedWords(5),
@@ -318,10 +350,10 @@ void main() {
       final loader = defaultLoader();
       final repo = AssetWordRepository(assetLoader: loader.call);
       final allowed = await repo.loadAllowedWords(5);
-      final secret = await repo.loadSecretWords(5);
+      final secret = await repo.loadSecretWords(5, GameDifficulty.common);
       expect(allowed, isNot(equals(secret)));
       expect(loader.requestCountFor(allowed5Path), 1);
-      expect(loader.requestCountFor(secret5Path), 1);
+      expect(loader.requestCountFor(secretPath(5, GameDifficulty.common)), 1);
     });
 
     test(
@@ -336,6 +368,28 @@ void main() {
       },
     );
 
+    test('caching for one difficulty does not short-circuit another '
+        'difficulty at the same length', () async {
+      final loader = defaultLoader();
+      final repo = AssetWordRepository(assetLoader: loader.call);
+      await repo.loadSecretWords(5, GameDifficulty.easy);
+      await repo.loadSecretWords(5, GameDifficulty.common);
+      await repo.loadSecretWords(5, GameDifficulty.hard);
+      expect(loader.requestCountFor(secretPath(5, GameDifficulty.easy)), 1);
+      expect(loader.requestCountFor(secretPath(5, GameDifficulty.common)), 1);
+      expect(loader.requestCountFor(secretPath(5, GameDifficulty.hard)), 1);
+    });
+
+    test('repeated requests for the same length/difficulty pair reuse the '
+        'cached load', () async {
+      final loader = defaultLoader();
+      final repo = AssetWordRepository(assetLoader: loader.call);
+      await repo.loadSecretWords(5, GameDifficulty.easy);
+      await repo.loadSecretWords(5, GameDifficulty.easy);
+      await repo.selectSecretWord(5, GameDifficulty.easy);
+      expect(loader.requestCountFor(secretPath(5, GameDifficulty.easy)), 1);
+    });
+
     test('callers cannot mutate the cached list', () async {
       final repo = AssetWordRepository(assetLoader: defaultLoader().call);
       final words = await repo.loadAllowedWords(5);
@@ -343,7 +397,7 @@ void main() {
 
       // A fresh load must be unaffected by any attempted mutation.
       final wordsAgain = await repo.loadAllowedWords(5);
-      expect(wordsAgain, ['apple', 'bread', 'crane', 'zesty']);
+      expect(wordsAgain, ['apple', 'bread', 'crane', 'swift', 'zesty']);
     });
   });
 }

@@ -66,6 +66,28 @@ class RulesScreen extends StatelessWidget {
                     'use up an attempt.',
               ),
               const SizedBox(height: 24),
+              Text('Difficulty', style: textTheme.titleMedium),
+              const SizedBox(height: 8),
+              const Text(
+                'Difficulty only changes which secret words the game can '
+                'pick from — it never changes scoring or attempt limits.',
+              ),
+              const SizedBox(height: 16),
+              const _RuleItem(
+                heading: 'Easy',
+                explanation: 'Familiar, high-frequency words.',
+              ),
+              const SizedBox(height: 16),
+              const _RuleItem(
+                heading: 'Common',
+                explanation: 'Broader everyday vocabulary.',
+              ),
+              const SizedBox(height: 16),
+              const _RuleItem(
+                heading: 'Hard',
+                explanation: 'Less frequent words.',
+              ),
+              const SizedBox(height: 24),
               Text('Attempt limits', style: textTheme.titleMedium),
               const SizedBox(height: 8),
               for (final wordLength in sortedLengths)

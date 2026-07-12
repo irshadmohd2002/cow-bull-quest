@@ -4,19 +4,20 @@ import 'package:cowbullgame/features/game/controllers/game_controller.dart';
 import 'package:cowbullgame/features/game/controllers/game_controller_state.dart';
 import 'package:cowbullgame/features/game/data/word_repository.dart';
 import 'package:cowbullgame/features/game/models/game_config.dart';
+import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:cowbullgame/features/game/models/game_status.dart';
 import 'package:cowbullgame/features/game/services/game_engine.dart';
 import 'package:cowbullgame/features/game/services/guess_validator.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A minimal [WordRepository] fake: [selectSecretWord] resolves from
-/// [wordsByLength] by default, throws [errorToThrow] if set, or — in
-/// [manualCompletion] mode — returns a pending [Completer]'s future that
-/// the test resolves explicitly via [completeCall], to control the order in
-/// which concurrent [GameController.startGame] calls resolve.
+/// [wordsByLengthAndDifficulty] by default, throws [errorToThrow] if set,
+/// or — in [manualCompletion] mode — returns a pending [Completer]'s
+/// future that the test resolves explicitly via [completeCall], to control
+/// the order in which concurrent [GameController.startGame] calls resolve.
 class _FakeWordRepository implements WordRepository {
-  final Map<int, String> wordsByLength = {};
-  final List<int> requestedLengths = [];
+  final Map<(int, GameDifficulty), String> wordsByLengthAndDifficulty = {};
+  final List<(int, GameDifficulty)> requestedSelections = [];
   final List<Completer<String>> _completers = [];
   bool manualCompletion = false;
   Object? errorToThrow;
@@ -25,9 +26,17 @@ class _FakeWordRepository implements WordRepository {
   /// tests can assert it was preserved end-to-end.
   StackTrace? lastThrownStackTrace;
 
+  /// Convenience: registers [word] for [wordLength] under every
+  /// [GameDifficulty], for tests that don't care which difficulty is used.
+  void registerWordForAllDifficulties(int wordLength, String word) {
+    for (final difficulty in GameDifficulty.values) {
+      wordsByLengthAndDifficulty[(wordLength, difficulty)] = word;
+    }
+  }
+
   @override
-  Future<String> selectSecretWord(int wordLength) {
-    requestedLengths.add(wordLength);
+  Future<String> selectSecretWord(int wordLength, GameDifficulty difficulty) {
+    requestedSelections.add((wordLength, difficulty));
     final error = errorToThrow;
     if (error != null) {
       final stackTrace = StackTrace.current;
@@ -39,9 +48,12 @@ class _FakeWordRepository implements WordRepository {
       _completers.add(completer);
       return completer.future;
     }
-    final word = wordsByLength[wordLength];
+    final word = wordsByLengthAndDifficulty[(wordLength, difficulty)];
     if (word == null) {
-      throw StateError('no fake secret word registered for length $wordLength');
+      throw StateError(
+        'no fake secret word registered for length $wordLength, '
+        'difficulty $difficulty',
+      );
     }
     return Future.value(word);
   }
@@ -56,7 +68,10 @@ class _FakeWordRepository implements WordRepository {
   Future<List<String>> loadAllowedWords(int wordLength) async => const [];
 
   @override
-  Future<List<String>> loadSecretWords(int wordLength) async => const [];
+  Future<List<String>> loadSecretWords(
+    int wordLength,
+    GameDifficulty difficulty,
+  ) async => const [];
 
   @override
   Future<bool> isAllowed(String word, int wordLength) async => true;
@@ -64,9 +79,18 @@ class _FakeWordRepository implements WordRepository {
 
 void main() {
   const engine = GameEngine();
-  final config4 = GameConfig.forWordLength(4);
-  final config5 = GameConfig.forWordLength(5);
-  final config6 = GameConfig.forWordLength(6);
+  final config4 = GameConfig.forSelection(
+    wordLength: 4,
+    difficulty: GameDifficulty.easy,
+  );
+  final config5 = GameConfig.forSelection(
+    wordLength: 5,
+    difficulty: GameDifficulty.easy,
+  );
+  final config6 = GameConfig.forSelection(
+    wordLength: 6,
+    difficulty: GameDifficulty.easy,
+  );
 
   group('GameController initial state', () {
     test('starts idle', () {
@@ -80,7 +104,8 @@ void main() {
 
   group('GameController.startGame', () {
     test('emits loading immediately, then active once resolved', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -94,18 +119,34 @@ void main() {
     });
 
     test('requests the secret word for the configured word length', () async {
-      final repo = _FakeWordRepository()..wordsByLength[6] = 'garden';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(6, 'garden');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
       );
 
       await controller.startGame(config6);
-      expect(repo.requestedLengths, [6]);
+      expect(repo.requestedSelections, [(6, GameDifficulty.easy)]);
+    });
+
+    test('requests the secret word for the configured difficulty', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(6, 'garden');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 6, difficulty: GameDifficulty.hard),
+      );
+      expect(repo.requestedSelections, [(6, GameDifficulty.hard)]);
     });
 
     test('the started session uses the config attempt limit', () async {
-      final repo = _FakeWordRepository()..wordsByLength[6] = 'garden';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(6, 'garden');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -155,7 +196,8 @@ void main() {
     );
 
     test('a failed startup leaves no stale session behind', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -172,8 +214,8 @@ void main() {
     test('starting with a new configuration changes word length and attempt '
         'limit', () async {
       final repo = _FakeWordRepository()
-        ..wordsByLength[4] = 'lace'
-        ..wordsByLength[5] = 'crane';
+        ..registerWordForAllDifficulties(4, 'lace')
+        ..registerWordForAllDifficulties(5, 'crane');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -187,6 +229,29 @@ void main() {
       expect(active.view.maxAttempts, 15);
     });
 
+    test('starting with a new configuration replaces both word length and '
+        'difficulty, requesting the new pool', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace')
+        ..registerWordForAllDifficulties(5, 'crane');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.easy),
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 5, difficulty: GameDifficulty.hard),
+      );
+
+      expect(repo.requestedSelections, [
+        (4, GameDifficulty.easy),
+        (5, GameDifficulty.hard),
+      ]);
+    });
+
     test('stale asynchronous result cannot overwrite a newer start', () async {
       final repo = _FakeWordRepository()..manualCompletion = true;
       final controller = GameController(
@@ -196,7 +261,10 @@ void main() {
 
       final futureA = controller.startGame(config4);
       final futureB = controller.startGame(config5);
-      expect(repo.requestedLengths, [4, 5]);
+      expect(repo.requestedSelections, [
+        (4, GameDifficulty.easy),
+        (5, GameDifficulty.easy),
+      ]);
 
       // B (the newer request) resolves first.
       repo.completeCall(1, 'grape');
@@ -232,24 +300,89 @@ void main() {
         expect((controller.state as GameActive).view.wordLength, 5);
       },
     );
+
+    test('a stale request for a different difficulty at the same word length '
+        'cannot overwrite a newer active game', () async {
+      final repo = _FakeWordRepository()..manualCompletion = true;
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      final easyConfig = GameConfig.forSelection(
+        wordLength: 4,
+        difficulty: GameDifficulty.easy,
+      );
+      final hardConfig = GameConfig.forSelection(
+        wordLength: 4,
+        difficulty: GameDifficulty.hard,
+      );
+
+      final futureA = controller.startGame(easyConfig);
+      final futureB = controller.startGame(hardConfig);
+      expect(repo.requestedSelections, [
+        (4, GameDifficulty.easy),
+        (4, GameDifficulty.hard),
+      ]);
+
+      // B (the newer request, hard) resolves first.
+      repo.completeCall(1, 'tace');
+      await futureB;
+
+      // A (the stale, easy request) resolves after B and must not
+      // overwrite it.
+      repo.completeCall(0, 'lace');
+      await futureA;
+
+      // The active session is still the one started from the hard
+      // config's word ("tace"), not the stale easy config's ("lace") —
+      // confirmed indirectly via a winning guess, since the active view
+      // never exposes the secret word directly.
+      controller.submitGuess('tace');
+      expect((controller.state as GameCompleted).session.secretWord, 'tace');
+    });
   });
 
   group('GameController.restart', () {
     test('requests a new secret word for the same configuration', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
       );
 
       await controller.startGame(config4);
-      expect(repo.requestedLengths, [4]);
+      expect(repo.requestedSelections, [(4, GameDifficulty.easy)]);
 
       await controller.restart();
-      expect(repo.requestedLengths, [4, 4]);
+      expect(repo.requestedSelections, [
+        (4, GameDifficulty.easy),
+        (4, GameDifficulty.easy),
+      ]);
       final active = controller.state as GameActive;
       expect(active.view.attemptsUsed, 0);
       expect(active.view.wordLength, 4);
+    });
+
+    test('restart preserves the difficulty from the most recent startGame '
+        'call', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.hard),
+      );
+      await controller.restart();
+
+      expect(repo.requestedSelections, [
+        (4, GameDifficulty.hard),
+        (4, GameDifficulty.hard),
+      ]);
     });
 
     test('does nothing if no game has been started yet', () async {
@@ -302,7 +435,8 @@ void main() {
     });
 
     test('is safely ignored after the game has completed', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -320,7 +454,8 @@ void main() {
     test(
       'a valid guess updates the active state and consumes an attempt',
       () async {
-        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final repo = _FakeWordRepository()
+          ..registerWordForAllDifficulties(4, 'lace');
         final controller = GameController(
           wordRepository: repo,
           gameEngine: engine,
@@ -337,7 +472,8 @@ void main() {
 
     test('an invalid guess does not consume an attempt and exposes the typed '
         'reason', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -352,7 +488,8 @@ void main() {
     });
 
     test('an accepted guess clears stale rejection feedback', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -367,7 +504,8 @@ void main() {
     });
 
     test('a winning guess transitions to completed/won', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -380,7 +518,8 @@ void main() {
     });
 
     test('a losing final guess transitions to completed/lost', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -400,7 +539,8 @@ void main() {
 
   group('GameController listeners', () {
     test('are notified for meaningful state changes', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -435,7 +575,8 @@ void main() {
     );
 
     test('submitGuess after dispose does not throw', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -447,7 +588,8 @@ void main() {
     });
 
     test('startGame after disposal does not call the repository', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -455,28 +597,30 @@ void main() {
       controller.dispose();
 
       await controller.startGame(config4);
-      expect(repo.requestedLengths, isEmpty);
+      expect(repo.requestedSelections, isEmpty);
       expect(controller.state, isA<GameIdle>());
     });
 
     test('restart after disposal does not call the repository', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
       );
       await controller.startGame(config4);
-      expect(repo.requestedLengths, [4]);
+      expect(repo.requestedSelections, [(4, GameDifficulty.easy)]);
 
       controller.dispose();
       await controller.restart();
-      expect(repo.requestedLengths, [4]);
+      expect(repo.requestedSelections, [(4, GameDifficulty.easy)]);
     });
 
     test(
       'submitGuess after disposal does not change observable state',
       () async {
-        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final repo = _FakeWordRepository()
+          ..registerWordForAllDifficulties(4, 'lace');
         final controller = GameController(
           wordRepository: repo,
           gameEngine: engine,
@@ -553,7 +697,8 @@ void main() {
 
   group('GameController secret-word protection', () {
     test('active presentation state does not expose the secret word', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -565,7 +710,8 @@ void main() {
     });
 
     test('completed state reveals the secret word deliberately', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -580,7 +726,8 @@ void main() {
 
   group('GameController history immutability', () {
     test('the active view exposes an unmodifiable guess list', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
@@ -593,7 +740,8 @@ void main() {
     });
 
     test('the completed session exposes an unmodifiable guess list', () async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,

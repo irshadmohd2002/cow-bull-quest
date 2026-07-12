@@ -1,21 +1,25 @@
 import 'package:cowbullgame/features/game/controllers/game_controller.dart';
 import 'package:cowbullgame/features/game/data/word_repository.dart';
 import 'package:cowbullgame/features/game/models/game_config.dart';
+import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:cowbullgame/features/game/presentation/game_screen.dart';
 import 'package:cowbullgame/features/game/services/game_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A minimal [WordRepository] fake: resolves [selectSecretWord] from
-/// [wordsByLength], or throws [errorToThrow] if set. Mirrors the fake used
-/// in `game_controller_test.dart` so widget tests never need real Flutter
-/// assets.
+/// [wordsByLength] (keyed by word length only — these widget tests never
+/// exercise cross-difficulty behavior, which `game_controller_test.dart`
+/// already covers), or throws [errorToThrow] if set.
 class _FakeWordRepository implements WordRepository {
   final Map<int, String> wordsByLength = {};
   Object? errorToThrow;
 
   @override
-  Future<String> selectSecretWord(int wordLength) async {
+  Future<String> selectSecretWord(
+    int wordLength,
+    GameDifficulty difficulty,
+  ) async {
     final error = errorToThrow;
     if (error != null) throw error;
     final word = wordsByLength[wordLength];
@@ -29,7 +33,10 @@ class _FakeWordRepository implements WordRepository {
   Future<List<String>> loadAllowedWords(int wordLength) async => const [];
 
   @override
-  Future<List<String>> loadSecretWords(int wordLength) async => const [];
+  Future<List<String>> loadSecretWords(
+    int wordLength,
+    GameDifficulty difficulty,
+  ) async => const [];
 
   @override
   Future<bool> isAllowed(String word, int wordLength) async => true;
@@ -37,7 +44,10 @@ class _FakeWordRepository implements WordRepository {
 
 void main() {
   const engine = GameEngine();
-  final config4 = GameConfig.forWordLength(4);
+  final config4 = GameConfig.forSelection(
+    wordLength: 4,
+    difficulty: GameDifficulty.easy,
+  );
 
   Widget buildSubject(GameController controller, GameConfig config) {
     return MaterialApp(
@@ -83,6 +93,28 @@ void main() {
 
     expect(find.textContaining('4'), findsWidgets);
     expect(find.textContaining('10'), findsWidgets); // max attempts for 4
+  });
+
+  testWidgets('shows the selected difficulty during loading, active play, and '
+      'completion', (tester) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    final controller = GameController(wordRepository: repo, gameEngine: engine);
+    final hardConfig4 = GameConfig.forSelection(
+      wordLength: 4,
+      difficulty: GameDifficulty.hard,
+    );
+
+    await tester.pumpWidget(buildSubject(controller, hardConfig4));
+    // Loading state: still shown, since it's rendered in the AppBar.
+    expect(find.textContaining('Hard'), findsOneWidget);
+
+    await tester.pumpAndSettle();
+    // Active state.
+    expect(find.textContaining('Hard'), findsOneWidget);
+
+    await enterAndSubmit(tester, 'lace');
+    // Completed state.
+    expect(find.textContaining('Hard'), findsOneWidget);
   });
 
   testWidgets('startup failure shows retry and return-home actions', (
