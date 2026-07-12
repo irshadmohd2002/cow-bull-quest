@@ -1,4 +1,5 @@
 import 'package:cowbullgame/features/game/models/game_config.dart';
+import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:cowbullgame/features/game/models/game_status.dart';
 import 'package:cowbullgame/features/game/models/guess_result.dart';
 import 'package:cowbullgame/features/game/services/game_engine.dart';
@@ -7,8 +8,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   const engine = GameEngine();
-  final config5 = GameConfig.forWordLength(5);
-  final config4 = GameConfig.forWordLength(4);
+  final config5 = GameConfig.forSelection(
+    wordLength: 5,
+    difficulty: GameDifficulty.easy,
+  );
+  final config4 = GameConfig.forSelection(
+    wordLength: 4,
+    difficulty: GameDifficulty.easy,
+  );
 
   group('GameEngine.startGame', () {
     test('starts with empty history and in-progress status', () {
