@@ -5,6 +5,8 @@ import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/fake_statistics_repository.dart';
+
 /// A minimal [WordRepository] fake so app-level navigation can be exercised
 /// without touching the real bundled word-list assets. [wordsByLength] is
 /// keyed by word length only, since these app-navigation tests don't need
@@ -284,6 +286,33 @@ void main() {
 
   group('CowBullApp settings ownership', () {
     testWidgets(
+      'the internally-created settings fallback is in-memory only — it '
+      'attempts no real persistence, unlike the main.dart/AppBootstrap path',
+      (tester) async {
+        // This test configures no SharedPreferences mock at all. If the
+        // fallback AppSettings created when `settings:` is omitted ever
+        // attempted real persistence, selecting Dark below would surface a
+        // MissingPluginException instead of just updating the UI — so this
+        // test passing is itself proof the fallback is non-persistent, as
+        // documented on CowBullApp.settings.
+        await tester.pumpWidget(
+          CowBullApp(wordRepository: _FakeWordRepository()),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Settings'));
+        await tester.tap(find.text('Settings'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Dark'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+        expect(app.themeMode, ThemeMode.dark);
+      },
+    );
+
+    testWidgets(
       'an internally-created settings controller functions correctly and '
       'is disposed cleanly when CowBullApp is removed',
       (tester) async {
@@ -383,6 +412,254 @@ void main() {
 
       final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
       expect(app.themeMode, ThemeMode.dark);
+    });
+  });
+
+  group('CowBullApp Statistics navigation', () {
+    testWidgets('Statistics opens from Home and starts empty', (tester) async {
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: _FakeWordRepository(),
+          statisticsRepository: FakeStatisticsRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Statistics'));
+      await tester.tap(find.text('Statistics'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('No completed games yet'), findsOneWidget);
+    });
+
+    testWidgets('back from Statistics returns to Home', (tester) async {
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: _FakeWordRepository(),
+          statisticsRepository: FakeStatisticsRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Statistics'));
+      await tester.tap(find.text('Statistics'));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Start Game'), findsOneWidget);
+    });
+
+    testWidgets('opening Statistics does not construct a GameController', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository();
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: repo,
+          statisticsRepository: FakeStatisticsRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Statistics'));
+      await tester.tap(find.text('Statistics'));
+      await tester.pumpAndSettle();
+
+      expect(repo.requestedLengths, isEmpty);
+    });
+
+    testWidgets('theme persists while navigating to Statistics', (
+      tester,
+    ) async {
+      final settings = AppSettings();
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: _FakeWordRepository(),
+          settings: settings,
+          statisticsRepository: FakeStatisticsRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Settings'));
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Dark'));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Statistics'));
+      await tester.tap(find.text('Statistics'));
+      await tester.pumpAndSettle();
+
+      final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(app.themeMode, ThemeMode.dark);
+    });
+  });
+
+  group('CowBullApp completed-game recording', () {
+    Future<void> enterAndSubmit(WidgetTester tester, String guess) async {
+      await tester.enterText(find.byType(TextField), guess);
+      await tester.tap(find.text('Submit'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a won game is recorded exactly once into statistics', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final statisticsRepository = FakeStatisticsRepository();
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: repo,
+          statisticsRepository: statisticsRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+
+      await enterAndSubmit(tester, 'lace');
+      expect(find.text('You won!'), findsOneWidget);
+
+      expect(statisticsRepository.recordedGames, hasLength(1));
+      expect(statisticsRepository.recordedGames.single.wordLength, 4);
+    });
+
+    testWidgets('completing a game updates the Statistics screen', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final statisticsRepository = FakeStatisticsRepository();
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: repo,
+          statisticsRepository: statisticsRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      await tester.ensureVisible(find.text('Return to Home'));
+      await tester.tap(find.text('Return to Home'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Statistics'));
+      await tester.tap(find.text('Statistics'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('No completed games yet'), findsNothing);
+      expect(find.textContaining('Won'), findsOneWidget);
+    });
+
+    testWidgets(
+      'restarting a completed game allows a second distinct recording',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final statisticsRepository = FakeStatisticsRepository();
+        await tester.pumpWidget(
+          CowBullApp(
+            wordRepository: repo,
+            statisticsRepository: statisticsRepository,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Start Game'));
+        await tester.tap(find.text('Start Game'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+        expect(statisticsRepository.recordedGames, hasLength(1));
+
+        await tester.tap(find.text('Restart'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(statisticsRepository.recordedGames, hasLength(2));
+        expect(
+          statisticsRepository.recordedGames[0].id,
+          isNot(statisticsRepository.recordedGames[1].id),
+        );
+      },
+    );
+
+    testWidgets('navigating away after completion does not record again', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final statisticsRepository = FakeStatisticsRepository();
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: repo,
+          statisticsRepository: statisticsRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+      expect(statisticsRepository.recordedGames, hasLength(1));
+
+      await tester.ensureVisible(find.text('Return to Home'));
+      await tester.tap(find.text('Return to Home'));
+      await tester.pumpAndSettle();
+
+      expect(statisticsRepository.recordedGames, hasLength(1));
+    });
+
+    testWidgets('an abandoned in-progress game is never recorded', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final statisticsRepository = FakeStatisticsRepository();
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: repo,
+          statisticsRepository: statisticsRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(statisticsRepository.recordedGames, isEmpty);
+    });
+
+    testWidgets('a failed startup is never recorded', (tester) async {
+      final repo = _FakeWordRepository();
+      final statisticsRepository = FakeStatisticsRepository();
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: repo,
+          statisticsRepository: statisticsRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text("We couldn't start the game. Please try again."),
+        findsOneWidget,
+      );
+      expect(statisticsRepository.recordedGames, isEmpty);
     });
   });
 }

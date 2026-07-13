@@ -8,12 +8,14 @@ void main() {
     void Function(int wordLength, DifficultyOption difficulty) onStartGame, {
     VoidCallback? onOpenRules,
     VoidCallback? onOpenSettings,
+    VoidCallback? onOpenStatistics,
   }) {
     return MaterialApp(
       home: HomeScreen(
         onStartGame: onStartGame,
         onOpenRules: onOpenRules ?? () {},
         onOpenSettings: onOpenSettings ?? () {},
+        onOpenStatistics: onOpenStatistics ?? () {},
       ),
     );
   }
@@ -111,6 +113,11 @@ void main() {
     expect(find.text('Settings'), findsOneWidget);
   });
 
+  testWidgets('shows the Statistics action', (tester) async {
+    await tester.pumpWidget(buildSubject((_, _) {}));
+    expect(find.text('Statistics'), findsOneWidget);
+  });
+
   testWidgets('Start Game is visually distinct from the secondary actions', (
     tester,
   ) async {
@@ -145,6 +152,21 @@ void main() {
 
     await tester.ensureVisible(find.text('Settings'));
     await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    expect(callCount, 1);
+  });
+
+  testWidgets('tapping Statistics invokes onOpenStatistics exactly once', (
+    tester,
+  ) async {
+    var callCount = 0;
+    await tester.pumpWidget(
+      buildSubject((_, _) {}, onOpenStatistics: () => callCount++),
+    );
+
+    await tester.ensureVisible(find.text('Statistics'));
+    await tester.tap(find.text('Statistics'));
     await tester.pumpAndSettle();
 
     expect(callCount, 1);

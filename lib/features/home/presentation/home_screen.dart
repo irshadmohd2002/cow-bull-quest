@@ -41,6 +41,7 @@ class HomeScreen extends StatefulWidget {
     required this.onStartGame,
     required this.onOpenRules,
     required this.onOpenSettings,
+    required this.onOpenStatistics,
   });
 
   /// Called with the chosen word length (4, 5, or 6) and difficulty when
@@ -52,6 +53,12 @@ class HomeScreen extends StatefulWidget {
 
   /// Called when the player wants to see the Settings screen.
   final VoidCallback onOpenSettings;
+
+  /// Called when the player wants to see the Statistics screen. Neutral by
+  /// design — this screen never imports the `statistics` feature itself;
+  /// the app-level composition root owns navigating there and supplying it
+  /// with a `StatisticsController`.
+  final VoidCallback onOpenStatistics;
 
   static const List<int> _wordLengthOptions = [4, 5, 6];
 
@@ -203,6 +210,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: const Padding(
                   padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Text('Settings'),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextButton(
+                onPressed: widget.onOpenStatistics,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  child: Text('Statistics'),
                 ),
               ),
             ],

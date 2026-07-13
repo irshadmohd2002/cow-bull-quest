@@ -5,10 +5,13 @@ import 'package:cowbullgame/features/game/controllers/game_controller_state.dart
 import 'package:cowbullgame/features/game/data/word_repository.dart';
 import 'package:cowbullgame/features/game/models/game_config.dart';
 import 'package:cowbullgame/features/game/models/game_difficulty.dart';
+import 'package:cowbullgame/features/game/models/game_session.dart';
 import 'package:cowbullgame/features/game/models/game_status.dart';
 import 'package:cowbullgame/features/game/services/game_engine.dart';
 import 'package:cowbullgame/features/game/services/guess_validator.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../../support/fake_completion_id_generator.dart';
 
 /// A minimal [WordRepository] fake: [selectSecretWord] resolves from
 /// [wordsByLengthAndDifficulty] by default, throws [errorToThrow] if set,
@@ -721,6 +724,375 @@ void main() {
       controller.submitGuess('lace');
       final completed = controller.state as GameCompleted;
       expect(completed.session.secretWord, 'lace');
+    });
+  });
+
+  group('GameController.onGameCompleted', () {
+    test('fires exactly once on a winning transition', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      var callCount = 0;
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        onGameCompleted: (_, _) => callCount++,
+      );
+      await controller.startGame(config4);
+
+      controller.submitGuess('lace');
+
+      expect(callCount, 1);
+    });
+
+    test('fires exactly once on a losing transition', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      var callCount = 0;
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        onGameCompleted: (_, _) => callCount++,
+      );
+      await controller.startGame(config4);
+
+      for (var i = 0; i < 9; i++) {
+        controller.submitGuess('race');
+      }
+      controller.submitGuess('mace');
+
+      expect(callCount, 1);
+    });
+
+    test('receives the completed session with the final status', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      GameSession? completedSession;
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        onGameCompleted: (_, session) => completedSession = session,
+      );
+      await controller.startGame(config4);
+
+      controller.submitGuess('lace');
+
+      expect(completedSession?.status, GameStatus.won);
+      expect(completedSession?.secretWord, 'lace');
+    });
+
+    test('does not fire on a rejected guess', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      var callCount = 0;
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        onGameCompleted: (_, _) => callCount++,
+      );
+      await controller.startGame(config4);
+
+      controller.submitGuess('toolong');
+
+      expect(callCount, 0);
+    });
+
+    test('does not fire again on a rebuild-style re-read of state', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      var callCount = 0;
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        onGameCompleted: (_, _) => callCount++,
+      );
+      await controller.startGame(config4);
+      controller.submitGuess('lace');
+      expect(callCount, 1);
+
+      // Reading state repeatedly, as a widget rebuild would, must not
+      // re-fire the completion callback.
+      // ignore: unnecessary_statements
+      controller.state;
+      // ignore: unnecessary_statements
+      controller.state;
+
+      expect(callCount, 1);
+    });
+
+    test('does not fire again for further submitGuess calls after '
+        'completion', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      var callCount = 0;
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        onGameCompleted: (_, _) => callCount++,
+      );
+      await controller.startGame(config4);
+      controller.submitGuess('lace');
+      expect(callCount, 1);
+
+      controller.submitGuess('race');
+
+      expect(callCount, 1);
+    });
+
+    test('does not fire for a failed startup', () async {
+      final repo = _FakeWordRepository()..errorToThrow = StateError('boom');
+      var callCount = 0;
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        onGameCompleted: (_, _) => callCount++,
+      );
+
+      await controller.startGame(config4);
+
+      expect(controller.state, isA<GameStartupFailure>());
+      expect(callCount, 0);
+    });
+
+    test(
+      'does not fire for an abandoned active game (disposed mid-game)',
+      () async {
+        final repo = _FakeWordRepository()
+          ..registerWordForAllDifficulties(4, 'lace');
+        var callCount = 0;
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+          onGameCompleted: (_, _) => callCount++,
+        );
+        await controller.startGame(config4);
+
+        controller.dispose();
+
+        expect(callCount, 0);
+      },
+    );
+
+    test('restart allows a new, distinct completion event', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final completedSessions = <GameSession>[];
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        onGameCompleted: (_, session) => completedSessions.add(session),
+      );
+      await controller.startGame(config4);
+      controller.submitGuess('lace');
+      expect(completedSessions, hasLength(1));
+
+      await controller.restart();
+      controller.submitGuess('lace');
+
+      expect(completedSessions, hasLength(2));
+    });
+  });
+
+  group('GameController completion ID lifecycle', () {
+    test('generates exactly one ID per successful start', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final generator = FakeCompletionIdGenerator(['id-1']);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        completionIdGenerator: generator,
+      );
+
+      await controller.startGame(config4);
+
+      expect(generator.callCount, 1);
+      expect(controller.debugActiveCompletionId, 'id-1');
+    });
+
+    test('a startup failure generates and retains no active ID', () async {
+      final repo = _FakeWordRepository()..errorToThrow = StateError('boom');
+      final generator = FakeCompletionIdGenerator(['id-1']);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        completionIdGenerator: generator,
+      );
+
+      await controller.startGame(config4);
+
+      expect(generator.callCount, 0);
+      expect(controller.debugActiveCompletionId, isNull);
+    });
+
+    test('a failed startup clears an ID retained from a previous successful '
+        'game', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final generator = FakeCompletionIdGenerator(['id-1']);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        completionIdGenerator: generator,
+      );
+      await controller.startGame(config4);
+      expect(controller.debugActiveCompletionId, 'id-1');
+
+      repo.errorToThrow = StateError('boom');
+      await controller.startGame(config4);
+
+      expect(controller.state, isA<GameStartupFailure>());
+      expect(controller.debugActiveCompletionId, isNull);
+    });
+
+    test('a stale start cannot replace the newer game ID', () async {
+      final repo = _FakeWordRepository()..manualCompletion = true;
+      // Only B's success ever reaches the generation-guarded generate()
+      // call (A's later resolution is recognized as stale and returns
+      // before calling it), so exactly one ID is ever generated here.
+      final generator = FakeCompletionIdGenerator(['id-for-b']);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        completionIdGenerator: generator,
+      );
+
+      final futureA = controller.startGame(config4);
+      final futureB = controller.startGame(config5);
+
+      // B (the newer request) resolves first.
+      repo.completeCall(1, 'grape');
+      await futureB;
+      expect(controller.debugActiveCompletionId, 'id-for-b');
+
+      // A (the stale request) resolves after B and must not overwrite it.
+      repo.completeCall(0, 'lace');
+      await futureA;
+      expect(controller.debugActiveCompletionId, 'id-for-b');
+      expect(generator.callCount, 1);
+    });
+
+    test('completion uses the ID assigned at start', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final generator = FakeCompletionIdGenerator(['id-1']);
+      String? receivedId;
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        completionIdGenerator: generator,
+        onGameCompleted: (id, _) => receivedId = id,
+      );
+      await controller.startGame(config4);
+
+      controller.submitGuess('lace');
+
+      expect(receivedId, 'id-1');
+    });
+
+    test(
+      'invalid guesses and rebuild-style state reads do not alter the ID',
+      () async {
+        final repo = _FakeWordRepository()
+          ..registerWordForAllDifficulties(4, 'lace');
+        final generator = FakeCompletionIdGenerator(['id-1']);
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+          completionIdGenerator: generator,
+        );
+        await controller.startGame(config4);
+
+        controller.submitGuess('toolong');
+        // ignore: unnecessary_statements
+        controller.state;
+        // ignore: unnecessary_statements
+        controller.state;
+
+        expect(controller.debugActiveCompletionId, 'id-1');
+        expect(generator.callCount, 1);
+      },
+    );
+
+    test('restart uses a distinct injected ID', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final generator = FakeCompletionIdGenerator(['id-1', 'id-2']);
+      final receivedIds = <String>[];
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        completionIdGenerator: generator,
+        onGameCompleted: (id, _) => receivedIds.add(id),
+      );
+      await controller.startGame(config4);
+      controller.submitGuess('lace');
+
+      await controller.restart();
+      controller.submitGuess('lace');
+
+      expect(receivedIds, ['id-1', 'id-2']);
+    });
+
+    test('starting a different configuration generates a new ID', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace')
+        ..registerWordForAllDifficulties(5, 'crane');
+      final generator = FakeCompletionIdGenerator(['id-1', 'id-2']);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        completionIdGenerator: generator,
+      );
+
+      await controller.startGame(config4);
+      expect(controller.debugActiveCompletionId, 'id-1');
+
+      await controller.startGame(config5);
+      expect(controller.debugActiveCompletionId, 'id-2');
+    });
+
+    test('disposal prevents a pending start from mutating the ID', () async {
+      final repo = _FakeWordRepository()..manualCompletion = true;
+      final generator = FakeCompletionIdGenerator(['id-1']);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        completionIdGenerator: generator,
+      );
+      final future = controller.startGame(config4);
+
+      controller.dispose();
+      repo.completeCall(0, 'lace');
+      await future;
+
+      expect(controller.debugActiveCompletionId, isNull);
+      expect(generator.callCount, 0);
+    });
+
+    test('two different games deliberately share one ID only when the '
+        'injected generator itself returns the same value', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final generator = FakeCompletionIdGenerator.constant('same-id');
+      final receivedIds = <String>[];
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        completionIdGenerator: generator,
+        onGameCompleted: (id, _) => receivedIds.add(id),
+      );
+      await controller.startGame(config4);
+      controller.submitGuess('lace');
+
+      await controller.restart();
+      controller.submitGuess('lace');
+
+      // GameController itself never deduplicates or caches IDs — it
+      // simply calls generate() once per successful start. Reusing the
+      // same value across two distinct games here is entirely the fake
+      // generator's deliberate choice, not GameController behavior.
+      expect(receivedIds, ['same-id', 'same-id']);
+      expect(generator.callCount, 2);
     });
   });
 

@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'app_bootstrap.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(CowBullApp());
+  final bootstrap = await AppBootstrap.load();
+  runApp(
+    CowBullApp(
+      settings: bootstrap.settings,
+      statisticsRepository: bootstrap.statisticsRepository,
+    ),
+  );
 }
