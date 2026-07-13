@@ -1,0 +1,14 @@
+## Copy this file to android/key.properties (same directory) and fill in
+## your own local upload-keystore values. android/key.properties is
+## gitignored — never commit it or the keystore file it points to.
+##
+## Generate a real upload keystore locally (do this yourself; do not run
+## this from an automated agent, and never paste real passwords into chat).
+## See docs/android_release_signing.md for the full keytool command.
+##
+## Store the keystore file itself outside this repository.
+
+storePassword=YOUR_STORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=upload
+storeFile=C:/path/outside/repository/upload-keystore.jks

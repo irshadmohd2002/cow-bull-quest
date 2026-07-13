@@ -379,6 +379,20 @@ void main() {
 
       expect(store.values[StorageKeys.themePreference], 'dark');
     });
+
+    test('succeeds against malformed stored data without needing to decode it '
+        'first', () async {
+      final store = FakePreferencesStore(
+        initialValues: {StorageKeys.statistics: 'not json{{'},
+      );
+      final repository = LocalStatisticsRepository(store: store);
+
+      final snapshot = await repository.clearStatistics();
+
+      expect(snapshot.totalGames, 0);
+      final reloaded = await repository.loadSnapshot();
+      expect(reloaded.totalGames, 0);
+    });
   });
 
   group('LocalStatisticsRepository operation serialization', () {

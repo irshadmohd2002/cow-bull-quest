@@ -192,9 +192,10 @@ class _CowBullAppState extends State<CowBullApp> {
       wordLength: wordLength,
       difficulty: _toGameDifficulty(difficulty),
     );
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => GameScreen(
+    unawaited(
+      _pushOnce(
+        context,
+        (_) => GameScreen(
           config: config,
           controller: GameController(
             wordRepository: widget.wordRepository,
@@ -209,6 +210,26 @@ class _CowBullAppState extends State<CowBullApp> {
         ),
       ),
     );
+  }
+
+  /// Whether a route pushed through [_pushOnce] is currently on top of the
+  /// navigator. Guards every entry point that pushes a screen (Start Game,
+  /// Rules, Settings, Statistics) against a rapid double-tap enqueueing two
+  /// [Navigator.push] calls before the first has a chance to render —
+  /// otherwise two identical routes could stack, requiring two pops to
+  /// actually return home. Reset the instant the pushed route is popped, so
+  /// normal sequential navigation (open Rules, return, open Settings) is
+  /// never blocked.
+  bool _isNavigating = false;
+
+  Future<void> _pushOnce(BuildContext context, WidgetBuilder builder) async {
+    if (_isNavigating) return;
+    _isNavigating = true;
+    try {
+      await Navigator.of(context).push(MaterialPageRoute(builder: builder));
+    } finally {
+      _isNavigating = false;
+    }
   }
 
   /// Maps a just-finished [session] onto a neutral [CompletedGame] and
@@ -245,18 +266,20 @@ class _CowBullAppState extends State<CowBullApp> {
   }
 
   void _openRules(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) =>
+    unawaited(
+      _pushOnce(
+        context,
+        (_) =>
             RulesScreen(attemptLimitsByWordLength: _attemptLimitsByWordLength),
       ),
     );
   }
 
   void _openSettings(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ListenableBuilder(
+    unawaited(
+      _pushOnce(
+        context,
+        (_) => ListenableBuilder(
           listenable: _settings,
           builder: (context, _) => SettingsScreen(
             themePreference: _settings.themePreference,
@@ -277,9 +300,10 @@ class _CowBullAppState extends State<CowBullApp> {
     if (_statisticsController.state is! StatisticsReady) {
       unawaited(_statisticsController.load());
     }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ListenableBuilder(
+    unawaited(
+      _pushOnce(
+        context,
+        (_) => ListenableBuilder(
           listenable: _statisticsController,
           builder: (context, _) => StatisticsScreen(
             state: _statisticsController.state,

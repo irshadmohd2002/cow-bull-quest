@@ -104,6 +104,20 @@ void main() {
       expect(state, isA<StatisticsReady>());
       expect((state as StatisticsReady).snapshot.totalGames, 0);
     });
+
+    test('succeeds and recovers even after a prior load failure', () async {
+      final repository = FakeStatisticsRepository()..failLoad = true;
+      final controller = StatisticsController(repository: repository);
+      await controller.load();
+      expect(controller.state, isA<StatisticsFailure>());
+
+      repository.failLoad = false;
+      await controller.clear();
+
+      final state = controller.state;
+      expect(state, isA<StatisticsReady>());
+      expect((state as StatisticsReady).snapshot.totalGames, 0);
+    });
   });
 
   group('StatisticsController stale-result handling', () {

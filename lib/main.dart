@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 
-import 'app.dart';
-import 'app_bootstrap.dart';
+import 'app_startup.dart';
+import 'core/error_reporting.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final bootstrap = await AppBootstrap.load();
-  runApp(
-    CowBullApp(
-      settings: bootstrap.settings,
-      statisticsRepository: bootstrap.statisticsRepository,
-    ),
-  );
+  installGlobalErrorHandlers();
+  runApp(AppStartup());
 }

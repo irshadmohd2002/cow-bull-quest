@@ -1,4 +1,4 @@
-package com.example.cowbullgame
+package com.cowbullgame.app
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -44,6 +44,28 @@ class _FakeWordRepository implements WordRepository {
   Future<bool> isAllowed(String word, int wordLength) async => true;
 }
 
+/// Drives a full, realistic background/resume cycle through every
+/// intermediate [AppLifecycleState] Android/iOS actually pass through
+/// (`resumed -> inactive -> hidden -> paused`, then back
+/// `paused -> hidden -> inactive -> resumed`). Jumping straight from
+/// `paused` to `resumed` violates Flutter's own lifecycle state machine
+/// (asserted in `AppLifecycleListener`, which `EditableText`'s focus
+/// handling attaches internally) and would fail with an assertion error on
+/// any screen containing a text field.
+Future<void> _backgroundAndResume(WidgetTester tester) async {
+  for (final state in [
+    AppLifecycleState.inactive,
+    AppLifecycleState.hidden,
+    AppLifecycleState.paused,
+    AppLifecycleState.hidden,
+    AppLifecycleState.inactive,
+    AppLifecycleState.resumed,
+  ]) {
+    tester.binding.handleAppLifecycleStateChanged(state);
+    await tester.pump();
+  }
+}
+
 void main() {
   testWidgets('the app starts on the home screen', (tester) async {
     await tester.pumpWidget(CowBullApp(wordRepository: _FakeWordRepository()));
@@ -660,6 +682,219 @@ void main() {
         findsOneWidget,
       );
       expect(statisticsRepository.recordedGames, isEmpty);
+    });
+
+    testWidgets('a statistics write failure does not block the completion UI', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final statisticsRepository = FakeStatisticsRepository()
+        ..failRecord = true;
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: repo,
+          statisticsRepository: statisticsRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(find.text('You won!'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('CowBullApp rapid-tap navigation guard', () {
+    testWidgets(
+      'a rapid double-tap on Start Game produces at most one Game route',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        await tester.pumpWidget(CowBullApp(wordRepository: repo));
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Start Game'));
+        await tester.tap(find.text('Start Game'));
+        // The second tap fires before either has been pumped — exactly the
+        // rapid-double-tap scenario this guard protects against. By the
+        // time it's dispatched the first tap may have already started
+        // covering Home with the new route, so a stray hit-test miss here
+        // is expected and harmless.
+        await tester.tap(find.text('Start Game'), warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Bulls & Cows · 4 letters'), findsOneWidget);
+
+        // A single pop reaches Home — if two routes had stacked, one pop
+        // would still leave a second Game screen showing.
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.text('Start Game'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a rapid double-tap on How to Play produces at most one Rules route',
+      (tester) async {
+        await tester.pumpWidget(
+          CowBullApp(wordRepository: _FakeWordRepository()),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('How to Play'));
+        await tester.tap(find.text('How to Play'));
+        await tester.tap(find.text('How to Play'), warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.text('Start Game'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a rapid double-tap on Settings produces at most one Settings route',
+      (tester) async {
+        await tester.pumpWidget(
+          CowBullApp(wordRepository: _FakeWordRepository()),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Settings'));
+        await tester.tap(find.text('Settings'));
+        await tester.tap(find.text('Settings'), warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.text('Start Game'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a rapid double-tap on Statistics produces at most one Statistics '
+      'route',
+      (tester) async {
+        await tester.pumpWidget(
+          CowBullApp(
+            wordRepository: _FakeWordRepository(),
+            statisticsRepository: FakeStatisticsRepository(),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Statistics'));
+        await tester.tap(find.text('Statistics'));
+        await tester.tap(find.text('Statistics'), warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.text('Start Game'), findsOneWidget);
+      },
+    );
+
+    testWidgets('sequential navigation is unaffected by the guard — Rules then '
+        'Settings both open normally', (tester) async {
+      await tester.pumpWidget(
+        CowBullApp(wordRepository: _FakeWordRepository()),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('How to Play'));
+      await tester.tap(find.text('How to Play'));
+      await tester.pumpAndSettle();
+      expect(find.text('Bulls'), findsWidgets);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Settings'));
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Follow system'), findsOneWidget);
+    });
+  });
+
+  group('CowBullApp lifecycle safety', () {
+    testWidgets('Home survives a background/resume cycle', (tester) async {
+      await tester.pumpWidget(
+        CowBullApp(wordRepository: _FakeWordRepository()),
+      );
+      await tester.pumpAndSettle();
+
+      await _backgroundAndResume(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Start Game'), findsOneWidget);
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Bulls & Cows'), findsOneWidget);
+    });
+
+    testWidgets('an active game survives a background/resume cycle and '
+        'remains usable', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      await tester.pumpWidget(CowBullApp(wordRepository: repo));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+
+      await _backgroundAndResume(tester);
+
+      expect(tester.takeException(), isNull);
+      await tester.enterText(find.byType(TextField), 'lace');
+      await tester.tap(find.text('Submit'));
+      await tester.pumpAndSettle();
+      expect(find.text('You won!'), findsOneWidget);
+    });
+
+    testWidgets('a completed game survives a background/resume cycle', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      await tester.pumpWidget(CowBullApp(wordRepository: repo));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'lace');
+      await tester.tap(find.text('Submit'));
+      await tester.pumpAndSettle();
+      expect(find.text('You won!'), findsOneWidget);
+
+      await _backgroundAndResume(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('You won!'), findsOneWidget);
+      await tester.tap(find.text('Restart'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Bulls & Cows'), findsOneWidget);
+    });
+
+    testWidgets('Statistics survives a background/resume cycle', (
+      tester,
+    ) async {
+      final statisticsRepository = FakeStatisticsRepository();
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: _FakeWordRepository(),
+          statisticsRepository: statisticsRepository,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Statistics'));
+      await tester.tap(find.text('Statistics'));
+      await tester.pumpAndSettle();
+
+      await _backgroundAndResume(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('No completed games yet'), findsOneWidget);
     });
   });
 }

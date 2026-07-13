@@ -1,6 +1,7 @@
 import 'app_settings.dart';
 import 'core/persistence/preferences_store.dart';
 import 'core/persistence/shared_preferences_store.dart';
+import 'core/persistence/storage_keys.dart';
 import 'features/statistics/data/local_statistics_repository.dart';
 import 'features/statistics/data/statistics_repository.dart';
 
@@ -39,4 +40,19 @@ class AppBootstrap {
   /// The shared statistics storage, backing the app-owned
   /// `StatisticsController` for the app's lifetime.
   final StatisticsRepository statisticsRepository;
+
+  /// Deletes every app-owned local storage key — currently
+  /// [StorageKeys.themePreference] and [StorageKeys.statistics], and
+  /// nothing else — from [store]. Used by the startup failure screen's
+  /// "Reset local data" action so a corrupted or otherwise unrecoverable
+  /// local storage state can be cleared without reinstalling the app.
+  ///
+  /// Removing a key that was never set is not an error (see
+  /// [PreferencesStore.remove]), so this is safe to call even when nothing
+  /// has been persisted yet. Never touches any storage key this app does
+  /// not itself own.
+  static Future<void> resetLocalData(PreferencesStore store) async {
+    await store.remove(StorageKeys.themePreference);
+    await store.remove(StorageKeys.statistics);
+  }
 }
