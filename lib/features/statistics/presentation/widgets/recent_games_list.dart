@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../models/difficulty_selection.dart';
 import '../../../../theme/app_spacing.dart';
+import '../../../../theme/app_status_colors.dart';
 import '../../models/completed_game.dart';
 import '../../models/game_outcome.dart';
 
@@ -42,6 +43,8 @@ class RecentGamesList extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
+    final statusColors = Theme.of(context).extension<AppStatusColors>();
+    final wonColor = statusColors?.success ?? colorScheme.primary;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
@@ -83,7 +86,7 @@ class RecentGamesList extends StatelessWidget {
                               : Icons.flag,
                           size: 18,
                           color: game.outcome == GameOutcome.won
-                              ? colorScheme.primary
+                              ? wonColor
                               : colorScheme.error,
                         ),
                         const SizedBox(width: AppSpacing.sm),

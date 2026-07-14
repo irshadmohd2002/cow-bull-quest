@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_spacing.dart';
+import '../../../theme/app_status_colors.dart';
 import '../controllers/game_controller.dart';
 import '../controllers/game_controller_state.dart';
 import '../models/game_config.dart';
@@ -128,7 +129,7 @@ class _GameScreenState extends State<GameScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Bulls & Cows · ${widget.config.wordLength} letters · '
+          'Cow Bull Quest · ${widget.config.wordLength} letters · '
           '${_difficultyLabel(widget.config.difficulty)}',
         ),
       ),
@@ -330,7 +331,10 @@ class _CompletedGameView extends StatelessWidget {
     final won = session.status == GameStatus.won;
     final outcomeText = won ? 'You won!' : 'You lost';
     final colorScheme = Theme.of(context).colorScheme;
-    final outcomeColor = won ? colorScheme.primary : colorScheme.error;
+    final statusColors = Theme.of(context).extension<AppStatusColors>();
+    final outcomeColor = won
+        ? (statusColors?.success ?? colorScheme.primary)
+        : colorScheme.error;
     final outcomeIcon = won ? Icons.emoji_events : Icons.flag;
 
     return Column(

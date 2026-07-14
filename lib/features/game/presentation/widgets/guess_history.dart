@@ -47,7 +47,8 @@ class GuessHistory extends StatelessWidget {
     final newestFirst = guesses.reversed.toList();
     return ListView.separated(
       itemCount: newestFirst.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
+      separatorBuilder: (context, index) =>
+          const SizedBox(height: AppSpacing.xs),
       itemBuilder: (context, index) =>
           GuessHistoryTile(guess: newestFirst[index]),
     );

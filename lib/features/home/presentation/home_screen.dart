@@ -85,22 +85,38 @@ class _HomeScreenState extends State<HomeScreen> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Bulls & Cows')),
+      appBar: AppBar(title: const Text('Cow Bull Quest')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.screenPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Semantics(
-                header: true,
-                child: Text(
-                  'Bulls & Cows',
-                  style: textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ExcludeSemantics(
+                    child: Icon(
+                      Icons.track_changes,
+                      color: colorScheme.primary,
+                      size: 32,
+                    ),
                   ),
-                  textAlign: TextAlign.center,
-                ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Flexible(
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        'Cow Bull Quest',
+                        style: textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.primary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
@@ -114,62 +130,88 @@ class _HomeScreenState extends State<HomeScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: AppSpacing.xxl),
-              Text('Word length', style: textTheme.titleMedium),
-              const SizedBox(height: AppSpacing.sm),
-              Semantics(
-                container: true,
-                label: 'Word length selection',
-                child: SegmentedButton<int>(
-                  segments: [
-                    for (final length in HomeScreen._wordLengthOptions)
-                      ButtonSegment(
-                        value: length,
-                        label: Text('$length letters'),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Word length', style: textTheme.titleMedium),
+                      const SizedBox(height: AppSpacing.sm),
+                      Semantics(
+                        container: true,
+                        label: 'Word length selection',
+                        child: SegmentedButton<int>(
+                          segments: [
+                            for (final length in HomeScreen._wordLengthOptions)
+                              ButtonSegment(
+                                value: length,
+                                label: Text('$length letters'),
+                              ),
+                          ],
+                          selected: {_selectedWordLength},
+                          onSelectionChanged: (selection) => setState(
+                            () => _selectedWordLength = selection.first,
+                          ),
+                        ),
                       ),
-                  ],
-                  selected: {_selectedWordLength},
-                  onSelectionChanged: (selection) =>
-                      setState(() => _selectedWordLength = selection.first),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              AnimatedSwitcher(
-                duration: AppMotion.durationFor(context, AppMotion.fast),
-                switchInCurve: AppMotion.curve,
-                child: Text(
-                  'You\'ll guess a $_selectedWordLength-letter secret word.',
-                  key: ValueKey(_selectedWordLength),
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
+                      const SizedBox(height: AppSpacing.sm),
+                      AnimatedSwitcher(
+                        duration: AppMotion.durationFor(
+                          context,
+                          AppMotion.fast,
+                        ),
+                        switchInCurve: AppMotion.curve,
+                        child: Text(
+                          'You\'ll guess a $_selectedWordLength-letter '
+                          'secret word.',
+                          key: ValueKey(_selectedWordLength),
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.xxl),
-              Text('Difficulty', style: textTheme.titleMedium),
-              const SizedBox(height: AppSpacing.sm),
-              Semantics(
-                container: true,
-                label: 'Difficulty selection',
-                child: SegmentedButton<DifficultyOption>(
-                  segments: [
-                    for (final option in DifficultyOption.values)
-                      ButtonSegment(
-                        value: option,
-                        label: Text(_difficultyLabel(option)),
+              const SizedBox(height: AppSpacing.lg),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Difficulty', style: textTheme.titleMedium),
+                      const SizedBox(height: AppSpacing.sm),
+                      Semantics(
+                        container: true,
+                        label: 'Difficulty selection',
+                        child: SegmentedButton<DifficultyOption>(
+                          segments: [
+                            for (final option in DifficultyOption.values)
+                              ButtonSegment(
+                                value: option,
+                                label: Text(_difficultyLabel(option)),
+                              ),
+                          ],
+                          selected: {_selectedDifficulty},
+                          onSelectionChanged: (selection) => setState(
+                            () => _selectedDifficulty = selection.first,
+                          ),
+                        ),
                       ),
-                  ],
-                  selected: {_selectedDifficulty},
-                  onSelectionChanged: (selection) =>
-                      setState(() => _selectedDifficulty = selection.first),
+                      const SizedBox(height: AppSpacing.md),
+                      for (final option in DifficultyOption.values)
+                        _DifficultyDescriptionRow(
+                          label: _difficultyLabel(option),
+                          description: _difficultyDescription(option),
+                          selected: option == _selectedDifficulty,
+                        ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
-              for (final option in DifficultyOption.values)
-                _DifficultyDescriptionRow(
-                  label: _difficultyLabel(option),
-                  description: _difficultyDescription(option),
-                  selected: option == _selectedDifficulty,
-                ),
               const SizedBox(height: AppSpacing.xxl),
               FilledButton(
                 onPressed: _handleStart,

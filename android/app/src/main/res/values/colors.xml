@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Deep navy matching assets/branding/cow_bull_quest_icon.png's
+         backdrop. Used for the splash screen and the native window
+         background shown before Flutter paints its first frame, in both
+         system light and dark mode, so there is never a white flash. -->
+    <color name="splash_background">#0B1026</color>
+</resources>

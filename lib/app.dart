@@ -319,7 +319,7 @@ class _CowBullAppState extends State<CowBullApp> {
     return ListenableBuilder(
       listenable: _settings,
       builder: (context, _) => MaterialApp(
-        title: 'Bulls & Cows',
+        title: 'Cow Bull Quest',
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
         themeMode: _settings.themeMode,

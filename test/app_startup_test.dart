@@ -33,7 +33,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text("Cow Bull couldn't start"), findsOneWidget);
+    expect(find.text("Cow Bull Quest couldn't start"), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
     expect(find.text('Reset local data'), findsOneWidget);
     expect(find.textContaining('SENTINEL_RAW_STARTUP_ERROR'), findsNothing);
@@ -160,7 +160,7 @@ void main() {
       expect(store.values[StorageKeys.themePreference], 'dark');
       expect(store.values[StorageKeys.statistics], '{"whatever":true}');
       expect(store.values['unrelated_key'], 'keep-me');
-      expect(find.text("Cow Bull couldn't start"), findsOneWidget);
+      expect(find.text("Cow Bull Quest couldn't start"), findsOneWidget);
     });
 
     testWidgets(

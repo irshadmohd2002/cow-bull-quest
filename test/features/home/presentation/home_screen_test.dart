@@ -22,7 +22,7 @@ void main() {
 
   testWidgets('shows the app title', (tester) async {
     await tester.pumpWidget(buildSubject((_, _) {}));
-    expect(find.text('Bulls & Cows'), findsWidgets);
+    expect(find.text('Cow Bull Quest'), findsWidgets);
   });
 
   testWidgets('briefly explains the game', (tester) async {

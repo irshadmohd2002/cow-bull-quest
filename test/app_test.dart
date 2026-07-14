@@ -112,7 +112,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Start Game'), findsNothing);
-    expect(find.textContaining('Bulls & Cows · 4 letters'), findsOneWidget);
+    expect(find.textContaining('Cow Bull Quest · 4 letters'), findsOneWidget);
   });
 
   testWidgets('starting a game uses the correct GameConfig for the '
@@ -127,7 +127,7 @@ void main() {
     await tester.tap(find.text('Start Game'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Bulls & Cows · 6 letters'), findsOneWidget);
+    expect(find.textContaining('Cow Bull Quest · 6 letters'), findsOneWidget);
     // Attempts limit for 6-letter games (GameConfig.forSelection).
     expect(find.textContaining('20'), findsWidgets);
   });
@@ -275,7 +275,7 @@ void main() {
     await tester.tap(find.text('Start Game'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Bulls & Cows · 4 letters'), findsOneWidget);
+    expect(find.textContaining('Cow Bull Quest · 4 letters'), findsOneWidget);
   });
 
   testWidgets('opening Rules does not construct a GameController', (
@@ -726,7 +726,10 @@ void main() {
         await tester.tap(find.text('Start Game'), warnIfMissed: false);
         await tester.pumpAndSettle();
 
-        expect(find.textContaining('Bulls & Cows · 4 letters'), findsOneWidget);
+        expect(
+          find.textContaining('Cow Bull Quest · 4 letters'),
+          findsOneWidget,
+        );
 
         // A single pop reaches Home — if two routes had stacked, one pop
         // would still leave a second Game screen showing.
@@ -832,7 +835,7 @@ void main() {
       await tester.ensureVisible(find.text('Start Game'));
       await tester.tap(find.text('Start Game'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Bulls & Cows'), findsOneWidget);
+      expect(find.textContaining('Cow Bull Quest'), findsOneWidget);
     });
 
     testWidgets('an active game survives a background/resume cycle and '
@@ -873,7 +876,7 @@ void main() {
       expect(find.text('You won!'), findsOneWidget);
       await tester.tap(find.text('Restart'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Bulls & Cows'), findsOneWidget);
+      expect(find.textContaining('Cow Bull Quest'), findsOneWidget);
     });
 
     testWidgets('Statistics survives a background/resume cycle', (

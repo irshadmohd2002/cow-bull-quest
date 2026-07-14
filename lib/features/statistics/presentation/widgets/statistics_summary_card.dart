@@ -10,10 +10,15 @@ import '../../models/statistics_snapshot.dart';
 /// squeezing the value — every number stays fully readable at 3x text
 /// scaling.
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.label, required this.value});
+  const _SummaryRow({required this.label, required this.value, this.accent});
 
   final String label;
   final String value;
+
+  /// Optional highlight color for [value] (e.g. gold for win rate, cyan for
+  /// streaks) — always applied on top of the same bold text, never the only
+  /// way the number is distinguished.
+  final Color? accent;
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +42,7 @@ class _SummaryRow extends StatelessWidget {
               value,
               style: textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
+                color: accent,
               ),
             ),
           ],
@@ -60,6 +66,7 @@ class StatisticsSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final averageAttempts = snapshot.averageAttemptsOnWins;
+    final colorScheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
@@ -79,14 +86,17 @@ class StatisticsSummaryCard extends StatelessWidget {
             _SummaryRow(
               label: 'Win rate',
               value: '${(snapshot.winRate * 100).round()}%',
+              accent: colorScheme.primary,
             ),
             _SummaryRow(
               label: 'Current streak',
               value: '${snapshot.currentWinStreak}',
+              accent: colorScheme.tertiary,
             ),
             _SummaryRow(
               label: 'Best streak',
               value: '${snapshot.bestWinStreak}',
+              accent: colorScheme.tertiary,
             ),
             _SummaryRow(
               label: 'Average attempts (wins)',

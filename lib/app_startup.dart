@@ -7,6 +7,7 @@ import 'app.dart';
 import 'app_bootstrap.dart';
 import 'core/persistence/preferences_store.dart';
 import 'core/persistence/shared_preferences_store.dart';
+import 'theme/app_theme.dart';
 
 /// [AppStartup]'s internal lifecycle. A sealed hierarchy so [AppStartup]
 /// can exhaustively `switch` over exactly one source of truth, matching the
@@ -183,11 +184,23 @@ class _StartupLoadingApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.system,
       home: Scaffold(
         body: Center(
           child: Semantics(
-            label: 'Starting Cow Bull.',
-            child: const CircularProgressIndicator(),
+            label: 'Starting Cow Bull Quest.',
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const ExcludeSemantics(
+                  child: Icon(Icons.track_changes, size: 40),
+                ),
+                const SizedBox(height: 24),
+                const CircularProgressIndicator(),
+              ],
+            ),
           ),
         ),
       ),
@@ -225,6 +238,9 @@ class _StartupFailureApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.system,
       home: Scaffold(
         // A Builder, not this method's own `context`, is required here:
         // `onReset` calls `showDialog`, which needs a `Localizations`/
@@ -239,10 +255,14 @@ class _StartupFailureApp extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, size: 48),
+                    Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                     const SizedBox(height: 16),
                     const Text(
-                      "Cow Bull couldn't start",
+                      "Cow Bull Quest couldn't start",
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,

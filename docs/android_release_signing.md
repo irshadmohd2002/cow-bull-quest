@@ -3,7 +3,7 @@
 ## App identity
 
 - Application ID: `com.cowbullgame.app`
-- Display name: Cow Bull
+- Display name: Cow Bull Quest
 - Version: `1.0.0+1`
 
 ## Why release builds fail right now

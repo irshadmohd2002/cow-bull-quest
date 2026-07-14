@@ -52,38 +52,50 @@ class RulesScreen extends StatelessWidget {
               const SizedBox(height: AppSpacing.xl),
               _SectionHeading('Scoring'),
               const SizedBox(height: AppSpacing.sm),
-              const _RuleItem(
-                icon: Icons.gps_fixed,
-                heading: 'Bulls',
-                explanation:
-                    'A bull is a letter that is correct and in the right '
-                    'position.',
-              ),
-              const SizedBox(height: AppSpacing.md),
-              const _RuleItem(
-                icon: Icons.sync_alt,
-                heading: 'Cows',
-                explanation:
-                    'A cow is a letter that is correct but in the wrong '
-                    'position.',
-              ),
-              const SizedBox(height: AppSpacing.md),
-              const _RuleItem(
-                icon: Icons.content_copy,
-                heading: 'Duplicate letters',
-                explanation:
-                    'A letter can never be counted more times than it '
-                    'appears in the secret word, even if your guess repeats '
-                    'it more often.',
-              ),
-              const SizedBox(height: AppSpacing.md),
-              const _RuleItem(
-                icon: Icons.block,
-                heading: 'Invalid guesses',
-                explanation:
-                    'A guess that is blank, the wrong length, or contains '
-                    'anything other than letters is rejected and does not '
-                    'use up an attempt.',
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _RuleItem(
+                        icon: Icons.gps_fixed,
+                        heading: 'Bulls',
+                        explanation:
+                            'A bull is a letter that is correct and in the '
+                            'right position.',
+                        iconColor: colorScheme.tertiary,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _RuleItem(
+                        icon: Icons.sync_alt,
+                        heading: 'Cows',
+                        explanation:
+                            'A cow is a letter that is correct but in the '
+                            'wrong position.',
+                        iconColor: colorScheme.secondary,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      const _RuleItem(
+                        icon: Icons.content_copy,
+                        heading: 'Duplicate letters',
+                        explanation:
+                            'A letter can never be counted more times than '
+                            'it appears in the secret word, even if your '
+                            'guess repeats it more often.',
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      const _RuleItem(
+                        icon: Icons.block,
+                        heading: 'Invalid guesses',
+                        explanation:
+                            'A guess that is blank, the wrong length, or '
+                            'contains anything other than letters is '
+                            'rejected and does not use up an attempt.',
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: AppSpacing.xl),
               _SectionHeading('Difficulty'),
@@ -96,22 +108,32 @@ class RulesScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              const _RuleItem(
-                icon: Icons.sentiment_satisfied_alt,
-                heading: 'Easy',
-                explanation: 'Familiar, high-frequency words.',
-              ),
-              const SizedBox(height: AppSpacing.md),
-              const _RuleItem(
-                icon: Icons.balance,
-                heading: 'Common',
-                explanation: 'Broader everyday vocabulary.',
-              ),
-              const SizedBox(height: AppSpacing.md),
-              const _RuleItem(
-                icon: Icons.local_fire_department,
-                heading: 'Hard',
-                explanation: 'Less frequent words.',
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _RuleItem(
+                        icon: Icons.sentiment_satisfied_alt,
+                        heading: 'Easy',
+                        explanation: 'Familiar, high-frequency words.',
+                      ),
+                      SizedBox(height: AppSpacing.md),
+                      _RuleItem(
+                        icon: Icons.balance,
+                        heading: 'Common',
+                        explanation: 'Broader everyday vocabulary.',
+                      ),
+                      SizedBox(height: AppSpacing.md),
+                      _RuleItem(
+                        icon: Icons.local_fire_department,
+                        heading: 'Hard',
+                        explanation: 'Less frequent words.',
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: AppSpacing.xl),
               _SectionHeading('Attempt limits'),
@@ -184,11 +206,18 @@ class _RuleItem extends StatelessWidget {
     required this.icon,
     required this.heading,
     required this.explanation,
+    this.iconColor,
   });
 
   final IconData icon;
   final String heading;
   final String explanation;
+
+  /// Overrides the icon's color; defaults to [ColorScheme.primary]. Used to
+  /// mirror the Bulls/Cows badge colors already used on the Game screen
+  /// (cyan tertiary for Bulls, blue secondary for Cows) so the same concept
+  /// reads with the same accent color everywhere it appears.
+  final Color? iconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +229,7 @@ class _RuleItem extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: colorScheme.primary),
+          Icon(icon, color: iconColor ?? colorScheme.primary),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(

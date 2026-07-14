@@ -36,6 +36,12 @@ class SettingsScreen extends StatelessWidget {
     AppThemePreference.dark: 'Always use the dark appearance.',
   };
 
+  static const Map<AppThemePreference, IconData> _icons = {
+    AppThemePreference.system: Icons.brightness_auto,
+    AppThemePreference.light: Icons.light_mode,
+    AppThemePreference.dark: Icons.dark_mode,
+  };
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -45,6 +51,7 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Settings')),
       body: SafeArea(
         child: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.screenPadding),
           child: RadioGroup<AppThemePreference>(
             groupValue: themePreference,
             onChanged: (selected) {
@@ -53,45 +60,52 @@ class SettingsScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.screenPadding,
-                    AppSpacing.screenPadding,
-                    AppSpacing.screenPadding,
-                    AppSpacing.xs,
-                  ),
-                  child: Semantics(
-                    header: true,
-                    child: Text('Theme', style: textTheme.titleMedium),
+                Semantics(
+                  header: true,
+                  child: Text('Theme', style: textTheme.titleMedium),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Choose how Cow Bull Quest looks on this device.',
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.screenPadding,
-                    0,
-                    AppSpacing.screenPadding,
-                    AppSpacing.md,
-                  ),
-                  child: Text(
-                    'Choose how Bulls & Cows looks on this device.',
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                const SizedBox(height: AppSpacing.md),
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      for (final preference in AppThemePreference.values)
+                        RadioListTile<AppThemePreference>(
+                          secondary: Icon(
+                            _icons[preference],
+                            color: preference == themePreference
+                                ? colorScheme.primary
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                          title: Text(
+                            _labels[preference]!,
+                            style: TextStyle(
+                              fontWeight: preference == themePreference
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                          // Excluded from semantics so the announced label
+                          // stays the concise option name — the fuller
+                          // description is a sighted-only visual aid, not
+                          // additional information a screen-reader user
+                          // needs repeated on every option.
+                          subtitle: ExcludeSemantics(
+                            child: Text(_descriptions[preference]!),
+                          ),
+                          value: preference,
+                          selected: preference == themePreference,
+                        ),
+                    ],
                   ),
                 ),
-                for (final preference in AppThemePreference.values)
-                  RadioListTile<AppThemePreference>(
-                    title: Text(_labels[preference]!),
-                    // Excluded from semantics so the announced label stays
-                    // the concise option name — the fuller description is a
-                    // sighted-only visual aid, not additional information a
-                    // screen-reader user needs repeated on every option.
-                    subtitle: ExcludeSemantics(
-                      child: Text(_descriptions[preference]!),
-                    ),
-                    value: preference,
-                    selected: preference == themePreference,
-                  ),
               ],
             ),
           ),
