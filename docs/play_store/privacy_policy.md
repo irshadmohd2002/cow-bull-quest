@@ -1,15 +1,15 @@
 # Privacy Policy — Cow Bull Quest
 
-Status: **completed draft, source document only** — see "Publishing
-requirement" below before this can be used for Play submission.
+Status: **completed, published** — the content below is live at the public
+policy URL and matches the in-app link and the Play Console declaration.
 
-**Effective date:** `[PLACEHOLDER: effective date, e.g. 2026-07-15]`
+**Effective date:** 15 July 2026
 
-**Developer / publisher:** `[PLACEHOLDER: developer or publisher name]`
+**Developer / publisher:** Md Irshadullah Gharbi
 
-**Support email:** `[PLACEHOLDER: support email address]`
+**Support email:** unfilteredofficial2021@gmail.com
 
-**Public policy URL:** `[PLACEHOLDER: public HTTPS URL where this policy is published]`
+**Public policy URL:** https://irshadmohd2002.github.io/cow-bull-quest/privacy-policy/
 
 ---
 
@@ -98,23 +98,29 @@ the app after a change constitutes acceptance of the updated policy.
 ## Contact
 
 Questions about this policy or the app's data practices can be sent to the
-support email above: `[PLACEHOLDER: support email address]`.
+support email above: unfilteredofficial2021@gmail.com.
 
 ---
 
 ## Publishing requirement (do not skip)
 
-**This Markdown file is a source draft only.** Before Play Store
-submission, its content must be published as a **publicly accessible HTTPS
-webpage** (not a PDF-only link, not a document requiring sign-in) at the
-URL entered into both:
+**This Markdown file is the source draft.** Its content has been published
+as a publicly accessible HTTPS webpage (not a PDF-only link, not a document
+requiring sign-in) at:
+
+```
+https://irshadmohd2002.github.io/cow-bull-quest/privacy-policy/
+```
+
+This exact URL must be entered into both:
 
 - Play Console's Store presence → Privacy policy field, and
 - the in-app privacy policy surface (see the next section).
 
-Any static hosting that serves plain HTTPS (a project page, a simple
-static site, a hosted docs page, etc.) is acceptable, as long as the URL is
-public and stable.
+**These two URLs must match exactly, character for character.** A
+mismatch — even a trailing-slash or `http`-vs-`https` difference — is a
+Play Console policy violation, so re-verify both fields against each other
+before submission.
 
 ## In-app privacy-policy requirement — implemented (Option A)
 
@@ -129,40 +135,37 @@ plugin. The URL itself is centralized in one place,
 `lib/core/privacy_policy.dart`, so it is never hard-coded into more than
 one widget.
 
-**The row remains disabled until the final public HTTPS URL replaces the
-placeholder.** `lib/core/privacy_policy.dart` currently defines:
+**The row is now enabled.** `lib/core/privacy_policy.dart` defines:
 
 ```
-https://example.com/cow-bull-quest/privacy
+https://irshadmohd2002.github.io/cow-bull-quest/privacy-policy/
 ```
 
-which is explicitly a placeholder, not the production URL — see the
-"Publishing requirement" section above. While the configured URL is this
-placeholder (or otherwise not a well-formed, non-placeholder HTTPS URL),
-the Settings row shows as disabled with the supporting text "Available
-before public release." instead of offering a broken or misleading link.
-This is enforced by `isReleaseReadyPrivacyPolicyUrl()` in the same file,
+which is the final, published production URL — not a placeholder. The
+placeholder constant (`placeholderPrivacyPolicyUrl`,
+`https://example.com/cow-bull-quest/privacy`) is kept in the same file only
+so `isReleaseReadyPrivacyPolicyUrl()` and its tests can still recognize the
+placeholder shape if it's ever reintroduced accidentally; it is no longer
+what `privacyPolicyUrl` points to. `isReleaseReadyPrivacyPolicyUrl()`
+confirms the configured URL is a well-formed, non-placeholder HTTPS URL,
 which the app-level composition root (`lib/app.dart`) checks before
-enabling the row.
+enabling the row — with this URL in place, that check now passes, so the
+Settings row shows as enabled with the supporting text "View how Cow Bull
+Quest handles local data." and opens the page in the platform browser. If
+the platform reports the launch failed (or the launch throws), the app
+shows a brief, friendly message rather than a raw error, and never crashes
+or leaves the UI in a broken state.
 
-**Before submission:**
+**Before submission, still confirm:**
 
-1. Publish this document's content as a public HTTPS webpage (see
-   "Publishing requirement" above).
-2. Replace `privacyPolicyUrl` in `lib/core/privacy_policy.dart` with that
-   exact URL.
-3. **This same URL must also be entered as Play Console's Store presence →
-   Privacy policy URL** — the in-app link and the Play Console
+1. **This same URL must also be entered as Play Console's Store presence →
+   Privacy policy URL, exactly** — the in-app link and the Play Console
    declaration must point to the identical published page, not two
-   different URLs.
-4. Once replaced with a real, non-placeholder HTTPS URL, the Settings row
-   becomes enabled automatically (no further code change needed) and opens
-   that page in the platform browser. If the platform reports the launch
-   failed (or the launch throws), the app shows a brief, friendly message
-   rather than a raw error, and never crashes or leaves the UI in a broken
-   state.
+   different URLs. See the warning in "Publishing requirement" above.
+2. The published page at that URL is live and reachable (not a 404 or a
+   sign-in wall).
 
-This behavior — and that it is not yet release-ready — is covered by
-tests in `test/core/privacy_policy_test.dart`,
+This behavior — and that the configured URL is release-ready — is covered
+by tests in `test/core/privacy_policy_test.dart`,
 `test/features/settings/presentation/settings_screen_test.dart`, and
 `test/app_test.dart` (see the "Privacy Policy composition" group).

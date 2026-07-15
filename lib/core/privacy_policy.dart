@@ -13,13 +13,11 @@ const String placeholderPrivacyPolicyUrl =
 /// place the URL is defined — the app must never hard-code it into more
 /// than one widget.
 ///
-/// **This is currently [placeholderPrivacyPolicyUrl], not the app's real
-/// production URL.** Replace this value with the actual, published HTTPS
-/// privacy-policy page (see `docs/play_store/privacy_policy.md`) before
-/// release. Until it is replaced, [isReleaseReadyPrivacyPolicyUrl] reports
-/// it as not release-ready, which is exactly what keeps the Settings item
-/// disabled.
-const String privacyPolicyUrl = placeholderPrivacyPolicyUrl;
+/// This is the app's real, published privacy-policy page (see
+/// `docs/play_store/privacy_policy.md`). It must match the Play Console
+/// Store presence → Privacy policy URL exactly.
+const String privacyPolicyUrl =
+    'https://irshadmohd2002.github.io/cow-bull-quest/privacy-policy/';
 
 /// Whether [url] is safe to present as a real, release-ready privacy-policy
 /// link: a well-formed HTTPS URL with a non-empty host that is not

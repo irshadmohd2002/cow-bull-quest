@@ -61,8 +61,8 @@ available options change over time and can differ by account/region.
 
 | Field | Draft value |
 |---|---|
-| Privacy policy URL | `[PLACEHOLDER: public HTTPS URL — see privacy_policy.md]` |
-| Support email | `[PLACEHOLDER: support email address]` |
+| Privacy policy URL | https://irshadmohd2002.github.io/cow-bull-quest/privacy-policy/ |
+| Support email | unfilteredofficial2021@gmail.com |
 
 ## Warning
 

@@ -30,18 +30,19 @@ Status legend:
 
 ## Privacy and declarations
 
-- [Privacy policy](privacy_policy.md) — ✅ completed draft, 🟡 contains
-  placeholders (developer name, support email, effective date, public
-  URL), 🔲 must be published as a public HTTPS webpage before submission.
-  **In-app link is implemented**: Settings has a "Privacy Policy" row
-  (`lib/features/settings/presentation/settings_screen.dart`) wired to a
-  centralized URL (`lib/core/privacy_policy.dart`), but 🔲 it stays
-  disabled until that file's placeholder URL is replaced with the final
-  published page, which must then match the Play Console privacy-policy
-  URL exactly.
+- [Privacy policy](privacy_policy.md) — ✅ completed and published
+  (developer name, support email, effective date, and public URL are all
+  final values; content is live at
+  https://irshadmohd2002.github.io/cow-bull-quest/privacy-policy/).
+  **In-app link is implemented and enabled**: Settings has a "Privacy
+  Policy" row (`lib/features/settings/presentation/settings_screen.dart`)
+  wired to a centralized URL (`lib/core/privacy_policy.dart`), which now
+  holds the final published URL. 🔲 That same URL must still be entered
+  into Play Console's privacy-policy field and re-verified there to match
+  exactly.
 - [Play Console declarations](play_console_declarations.md) — ✅
-  completed draft, 🟡 contains placeholders (privacy-policy URL, support
-  email), 🔲 must be manually re-entered into Play Console
+  completed, privacy-policy URL and support email filled in, 🔲 must still
+  be manually re-entered into Play Console
 - [Content rating preparation](content_rating_preparation.md) — ✅
   completed draft, 🔲 final rating assigned by Play Console's IARC
   questionnaire
@@ -66,18 +67,22 @@ Status legend:
 ## Checklists and support
 
 - [Play Console checklist](play_console_checklist.md) — ✅ completed
-  checklist, 🟡 contains placeholders (developer name, support email,
-  privacy-policy URL, account type, tester group, country availability)
-- [Support information](support_information.md) — 🟡 placeholder
-  template requiring user input (no contact details invented)
+  checklist, developer name/support email/privacy-policy URL filled in,
+  🟡 still contains placeholders only Google-account-side details can fill
+  (account type, tester group, country availability)
+- [Support information](support_information.md) — ✅ developer name,
+  support email, and privacy contact filled in, 🟡 still contains
+  placeholders (optional website, expected response time, copyright year)
 
 ## What is explicitly not done yet
 
 - No screenshots or feature graphic have been generated (⬜ above).
 - No Play Console account or app entry has been created (🔲 above).
 - No build has been uploaded, and no testers have been invited.
-- The in-app "Privacy Policy" Settings row is implemented but **stays
-  disabled** until `lib/core/privacy_policy.dart`'s placeholder URL is
-  replaced with the real, published HTTPS page — see `privacy_policy.md`'s
-  "In-app privacy-policy requirement — implemented (Option A)" section.
+- The in-app "Privacy Policy" Settings row is implemented and **now
+  enabled** — `lib/core/privacy_policy.dart` holds the real, published
+  HTTPS page. It still needs to be entered into Play Console's
+  privacy-policy field and re-verified there to match exactly — see
+  `privacy_policy.md`'s "In-app privacy-policy requirement — implemented
+  (Option A)" section.
 - No file in this folder has been staged, committed, or published.

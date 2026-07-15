@@ -1,5 +1,6 @@
 import 'package:cowbullgame/app.dart';
 import 'package:cowbullgame/app_settings.dart';
+import 'package:cowbullgame/core/privacy_policy.dart' as privacy_policy_config;
 import 'package:cowbullgame/features/game/data/word_repository.dart';
 import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:flutter/material.dart';
@@ -904,10 +905,13 @@ void main() {
   group('Privacy Policy composition', () {
     testWidgets(
       'Settings shows a disabled Privacy Policy row while the configured '
-      'URL is the placeholder (the default)',
+      'URL is still the placeholder',
       (tester) async {
         await tester.pumpWidget(
-          CowBullApp(wordRepository: _FakeWordRepository()),
+          CowBullApp(
+            wordRepository: _FakeWordRepository(),
+            privacyPolicyUrl: privacy_policy_config.placeholderPrivacyPolicyUrl,
+          ),
         );
         await tester.pumpAndSettle();
 
@@ -919,6 +923,55 @@ void main() {
         expect(find.text('Available before public release.'), findsOneWidget);
       },
     );
+
+    testWidgets(
+      'the default composition (no explicit privacyPolicyUrl) uses the '
+      "app's final release-ready URL and enables the row",
+      (tester) async {
+        await tester.pumpWidget(
+          CowBullApp(wordRepository: _FakeWordRepository()),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Settings'));
+        await tester.tap(find.text('Settings'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Privacy Policy'), findsOneWidget);
+        expect(
+          find.text('View how Cow Bull Quest handles local data.'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('the default composition passes the centrally configured '
+        'privacyPolicyUrl through — tapping launches exactly that URL', (
+      tester,
+    ) async {
+      var callCount = 0;
+      Uri? launchedUri;
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: _FakeWordRepository(),
+          urlLauncher: (uri) async {
+            callCount++;
+            launchedUri = uri;
+            return true;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Settings'));
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Privacy Policy'));
+      await tester.pumpAndSettle();
+
+      expect(callCount, 1);
+      expect(launchedUri, Uri.parse(privacy_policy_config.privacyPolicyUrl));
+    });
 
     testWidgets('a non-HTTPS configured URL also keeps the row disabled', (
       tester,

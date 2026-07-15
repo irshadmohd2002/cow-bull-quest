@@ -3,8 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('privacyPolicyUrl', () {
-    test('is currently the documented placeholder', () {
-      expect(privacyPolicyUrl, placeholderPrivacyPolicyUrl);
+    test('is the final published URL, not the placeholder', () {
+      expect(privacyPolicyUrl, isNot(placeholderPrivacyPolicyUrl));
+      expect(
+        privacyPolicyUrl,
+        'https://irshadmohd2002.github.io/cow-bull-quest/privacy-policy/',
+      );
     });
   });
 
@@ -16,8 +20,8 @@ void main() {
       );
     });
 
-    test('rejects the current privacyPolicyUrl (still the placeholder)', () {
-      expect(isReleaseReadyPrivacyPolicyUrl(privacyPolicyUrl), isFalse);
+    test('accepts the current privacyPolicyUrl (the final published URL)', () {
+      expect(isReleaseReadyPrivacyPolicyUrl(privacyPolicyUrl), isTrue);
     });
 
     test('accepts a well-formed, non-placeholder HTTPS URL', () {

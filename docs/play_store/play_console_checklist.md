@@ -18,9 +18,9 @@ developer can supply.
 
 ## Placeholders to fill in before use
 
-- Developer name: `[PLACEHOLDER]`
-- Support email: `[PLACEHOLDER]`
-- Privacy-policy URL: `[PLACEHOLDER]`
+- Developer name: Md Irshadullah Gharbi
+- Support email: unfilteredofficial2021@gmail.com
+- Privacy-policy URL: https://irshadmohd2002.github.io/cow-bull-quest/privacy-policy/
 - Play Console account type (personal / organization): `[PLACEHOLDER]`
 - Tester group (email list or Google Group name): `[PLACEHOLDER]`
 - Country availability (which countries the app will be released in): `[PLACEHOLDER]`
@@ -50,7 +50,7 @@ developer can supply.
 - [ ] Short description copied from `store_listing.md` (49/80 characters)
 - [ ] Full description copied from `store_listing.md` (1,640/4,000 characters)
 - [ ] Category set to Word or Puzzle (or closest currently-available label)
-- [ ] Contact details (support email) filled in: `[PLACEHOLDER]`
+- [ ] Contact details (support email) filled in: unfilteredofficial2021@gmail.com
 
 ## Graphics
 
@@ -60,16 +60,20 @@ developer can supply.
 
 ## Privacy policy
 
-- [ ] `privacy_policy.md` content published as a public HTTPS webpage
-- [ ] Public URL entered in Play Console's privacy-policy field: `[PLACEHOLDER]`
+- [x] `privacy_policy.md` content published as a public HTTPS webpage:
+      https://irshadmohd2002.github.io/cow-bull-quest/privacy-policy/
+- [ ] Public URL entered in Play Console's privacy-policy field:
+      https://irshadmohd2002.github.io/cow-bull-quest/privacy-policy/
+      (🔲 manual Play Console action, still to be performed)
 - [x] In-app privacy-policy link implemented — Settings → "Privacy Policy"
       row (see `privacy_policy.md` "In-app privacy-policy requirement —
       implemented (Option A)")
-- [ ] `lib/core/privacy_policy.dart`'s `privacyPolicyUrl` replaced with the
-      final published URL (currently the documented placeholder, which
-      keeps the Settings row disabled by design)
+- [x] `lib/core/privacy_policy.dart`'s `privacyPolicyUrl` replaced with the
+      final published URL — the Settings row is now enabled
 - [ ] Confirmed the in-app URL and the Play Console privacy-policy URL are
-      the identical published page
+      the identical published page (🔲 re-verify once the URL above is
+      entered in Play Console — see the exact-match warning in
+      `privacy_policy.md`)
 
 ## Data Safety
 
