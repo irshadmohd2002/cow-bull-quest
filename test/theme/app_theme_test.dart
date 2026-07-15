@@ -108,6 +108,87 @@ void main() {
     });
   });
 
+  group('AppTheme AppBar blends with the scaffold', () {
+    test(
+      'light AppBar background matches the pale-blue scaffold background',
+      () {
+        final theme = AppTheme.light;
+        expect(
+          theme.appBarTheme.backgroundColor,
+          theme.scaffoldBackgroundColor,
+        );
+      },
+    );
+
+    test(
+      'dark AppBar background matches the deep navy scaffold background',
+      () {
+        final theme = AppTheme.dark;
+        expect(
+          theme.appBarTheme.backgroundColor,
+          theme.scaffoldBackgroundColor,
+        );
+      },
+    );
+
+    test('AppBar has no elevation, scrolled-under elevation, or surface '
+        'tint that would create a seam', () {
+      for (final theme in [AppTheme.light, AppTheme.dark]) {
+        expect(theme.appBarTheme.elevation, 0);
+        expect(theme.appBarTheme.scrolledUnderElevation, 0);
+        expect(theme.appBarTheme.surfaceTintColor, Colors.transparent);
+      }
+    });
+
+    test('AppBar foreground color meets WCAG contrast against its own '
+        'background in both themes', () {
+      for (final theme in [AppTheme.light, AppTheme.dark]) {
+        final ratio = _contrastRatio(
+          theme.appBarTheme.foregroundColor!,
+          theme.appBarTheme.backgroundColor!,
+        );
+        expect(
+          ratio,
+          greaterThanOrEqualTo(4.5),
+          reason:
+              '${theme.colorScheme.brightness} AppBar foreground/background '
+              'contrast ratio $ratio is below the 4.5:1 body-text minimum',
+        );
+      }
+    });
+
+    testWidgets('themed AppBar renders flush with the scaffold body behind '
+        'scrollable content', (tester) async {
+      for (final theme in [AppTheme.light, AppTheme.dark]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: Scaffold(
+              appBar: AppBar(title: const Text('Cow Bull Quest')),
+              body: ListView(
+                children: List.generate(30, (i) => ListTile(title: Text('$i'))),
+              ),
+            ),
+          ),
+        );
+        await tester.drag(find.byType(ListView), const Offset(0, -500));
+        await tester.pumpAndSettle();
+
+        final appBarMaterial = tester.widget<Material>(
+          find
+              .descendant(
+                of: find.byType(AppBar),
+                matching: find.byType(Material),
+              )
+              .first,
+        );
+        expect(appBarMaterial.color, theme.scaffoldBackgroundColor);
+        expect(appBarMaterial.elevation, 0);
+        expect(tester.takeException(), isNull);
+      }
+    });
+  });
+
   group('AppTheme brand palette', () {
     const brandGold = Color(0xFFFFC33D);
 

@@ -27,6 +27,12 @@ a Flutter asset and none of its extra features (coins, daily quests,
 leaderboard, achievements, profiles, adventure mode, bottom navigation) were
 implemented — those exist only in the mockup, not in this app.
 
+`assets/branding/cow_bull_quest_icon.png` is bundled as a Flutter runtime
+asset (declared narrowly in `pubspec.yaml` as that single file, not the
+whole `assets/branding/` directory) and used as a small, compact emblem on
+the Home screen's branded hero card and the startup loading screen — it is
+never stretched to dominate a screen and never has text embedded in it.
+
 ## Final palette
 
 Every pair below was checked against the WCAG contrast formula: body-text
@@ -52,7 +58,7 @@ used as body text on a light surface.
 
 | Role | Hex | Notes |
 |---|---|---|
-| `background` | `#FAF7F1` | Warm near-white |
+| `background` | `#F3F6FC` | Cool, pale blue-neutral near-white |
 | `surface` | `#FFFFFF` | |
 | `surfaceContainerHighest` | `#EEF2FB` | Cool light blue tint |
 | `primary` / `onPrimary` | `#FFC33D` / `#241900` | Same brand gold, dark text on it |
@@ -119,9 +125,10 @@ badges and the Rules screen's scoring explanation icons.
 
 ## Light-theme guidance
 
-Bright, clean, near-white background; blue for primary surfaces (AppBar/
-Card tinting); gold reserved for primary actions/highlights, never plain
-body text; navy-charcoal (`#14213D`) for body text, not pure black.
+Bright, clean, cool pale-blue-neutral background (not warm/cream); blue for
+primary surfaces (AppBar/Card tinting); gold reserved for primary
+actions/highlights, never plain body text; navy-charcoal (`#14213D`) for
+body text, not pure black.
 
 ## Dark-theme guidance
 

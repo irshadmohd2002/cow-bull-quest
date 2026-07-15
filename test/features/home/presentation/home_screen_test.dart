@@ -315,6 +315,139 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  group('selector label wrapping fix', () {
+    /// Every [Text] rendered inside a [SegmentedButton] of type [T] is
+    /// configured to never wrap onto a second line - the structural half of
+    /// the "Common" wrapping fix (the other half, [FittedBox] scale-down, is
+    /// what keeps that single line from overflowing/clipping instead).
+    void expectSingleLineSegments<T>(WidgetTester tester) {
+      final texts = tester.widgetList<Text>(
+        find.descendant(
+          of: find.byType(SegmentedButton<T>),
+          matching: find.byType(Text),
+        ),
+      );
+      expect(texts, isNotEmpty);
+      for (final text in texts) {
+        expect(text.maxLines, 1);
+        expect(text.softWrap, isFalse);
+      }
+    }
+
+    testWidgets('word-length segment labels are configured as single-line', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject((_, _) {}));
+      expectSingleLineSegments<int>(tester);
+    });
+
+    testWidgets(
+      'Easy/Common/Hard segment labels are configured as single-line',
+      (tester) async {
+        await tester.pumpWidget(buildSubject((_, _) {}));
+        expectSingleLineSegments<DifficultyOption>(tester);
+      },
+    );
+
+    testWidgets(
+      'Easy, Common, and Hard remain visible without overflow at 320x568',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 568);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(buildSubject((_, _) {}));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Easy'), findsOneWidget);
+        expect(find.text('Common'), findsOneWidget);
+        expect(find.text('Hard'), findsOneWidget);
+        expect(find.text('4 letters'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Easy, Common, and Hard remain visible without overflow at 3x text '
+      'scale',
+      (tester) async {
+        await tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(3.0)),
+            child: buildSubject((_, _) {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Easy'), findsOneWidget);
+        expect(find.text('Common'), findsOneWidget);
+        expect(find.text('Hard'), findsOneWidget);
+        expect(find.text('4 letters'), findsOneWidget);
+      },
+    );
+
+    testWidgets('the difficulty selector keeps at least a 48 logical-pixel tap '
+        'target height', (tester) async {
+      await tester.pumpWidget(buildSubject((_, _) {}));
+      final size = tester.getSize(
+        find.byType(SegmentedButton<DifficultyOption>),
+      );
+      expect(size.height, greaterThanOrEqualTo(48));
+    });
+
+    testWidgets(
+      'the word-length selector keeps at least a 48 logical-pixel tap '
+      'target height',
+      (tester) async {
+        await tester.pumpWidget(buildSubject((_, _) {}));
+        final size = tester.getSize(find.byType(SegmentedButton<int>));
+        expect(size.height, greaterThanOrEqualTo(48));
+      },
+    );
+
+    testWidgets('selecting Common still updates the selection (semantic '
+        'label is preserved, not just the shrunk visual label)', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject((_, _) {}));
+
+      await tester.tap(find.text('Common'));
+      await tester.pumpAndSettle();
+
+      final segmentedButton = tester.widget<SegmentedButton<DifficultyOption>>(
+        find.byType(SegmentedButton<DifficultyOption>),
+      );
+      expect(segmentedButton.selected, {DifficultyOption.common});
+    });
+  });
+
+  group('branding', () {
+    testWidgets('displays the approved branding icon as a runtime asset', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject((_, _) {}));
+
+      final image = tester.widget<Image>(find.byType(Image));
+      final provider = image.image as AssetImage;
+      expect(provider.assetName, 'assets/branding/cow_bull_quest_icon.png');
+    });
+
+    testWidgets('the branding icon is marked decorative so the adjacent '
+        'title is not announced twice', (tester) async {
+      await tester.pumpWidget(buildSubject((_, _) {}));
+
+      expect(
+        find.ancestor(
+          of: find.byType(Image),
+          matching: find.byType(ExcludeSemantics),
+        ),
+        findsOneWidget,
+      );
+    });
+  });
+
   testWidgets(
     'the word-length summary updates when a different length is selected',
     (tester) async {

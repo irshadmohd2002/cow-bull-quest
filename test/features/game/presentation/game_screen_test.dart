@@ -101,12 +101,25 @@ void main() {
     await tester.pumpWidget(buildSubject(controller, config4));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('4'), findsWidgets);
+    // Word length is shown in a rich-text status-panel chip.
+    expect(find.textContaining('4', findRichText: true), findsWidgets);
     expect(find.textContaining('10'), findsWidgets); // max attempts for 4
   });
 
-  testWidgets('shows the selected difficulty during loading, active play, and '
-      'completion', (tester) async {
+  testWidgets('the app bar title is exactly Cow Bull Quest, with no '
+      'configuration suffix', (tester) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    final controller = GameController(wordRepository: repo, gameEngine: engine);
+
+    await tester.pumpWidget(buildSubject(controller, config4));
+    await tester.pumpAndSettle();
+
+    final appBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect((appBar.title as Text).data, 'Cow Bull Quest');
+  });
+
+  testWidgets('shows the selected difficulty in the status panel during '
+      'active play', (tester) async {
     final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
     final controller = GameController(wordRepository: repo, gameEngine: engine);
     final hardConfig4 = GameConfig.forSelection(
@@ -115,16 +128,13 @@ void main() {
     );
 
     await tester.pumpWidget(buildSubject(controller, hardConfig4));
-    // Loading state: still shown, since it's rendered in the AppBar.
-    expect(find.textContaining('Hard'), findsOneWidget);
-
     await tester.pumpAndSettle();
-    // Active state: shown in both the AppBar and the status panel.
-    expect(find.textContaining('Hard'), findsAtLeastNWidgets(1));
 
-    await enterAndSubmit(tester, 'lace');
-    // Completed state.
-    expect(find.textContaining('Hard'), findsOneWidget);
+    // The status panel's difficulty chip renders as rich text.
+    expect(
+      find.textContaining('Hard', findRichText: true),
+      findsAtLeastNWidgets(1),
+    );
   });
 
   testWidgets('startup failure shows retry and return-home actions', (
@@ -201,7 +211,7 @@ void main() {
     await enterAndSubmit(tester, 'to');
 
     expect(find.text('Your guess must be exactly 4 letters.'), findsOneWidget);
-    expect(find.textContaining('Attempts used: 0'), findsOneWidget);
+    expect(find.textContaining('0 of 10 attempts used'), findsOneWidget);
   });
 
   testWidgets(
@@ -233,7 +243,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.textContaining('Attempts used: 0'), findsOneWidget);
+      expect(find.textContaining('0 of 10 attempts used'), findsOneWidget);
       // No history row was added: the only guess-history related text on
       // screen is the empty-state, never a scored 'Bulls:'/'Cows:' row.
       expect(find.textContaining('Bulls:'), findsNothing);
@@ -342,7 +352,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.textContaining('Attempts used: 0'), findsOneWidget);
+    expect(find.textContaining('0 of 10 attempts used'), findsOneWidget);
   });
 
   testWidgets('return home pops the gameplay route', (tester) async {
@@ -503,7 +513,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('RACE'), findsOneWidget);
-      expect(find.textContaining('Attempts used: 1'), findsOneWidget);
+      expect(find.textContaining('1 of 10 attempts used'), findsOneWidget);
     },
   );
 

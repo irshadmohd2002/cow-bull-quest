@@ -131,7 +131,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Start Game'), findsNothing);
-    expect(find.textContaining('Cow Bull Quest · 4 letters'), findsOneWidget);
+    expect(find.text('Cow Bull Quest'), findsOneWidget);
+    expect(find.bySemanticsLabel('Guess input, 4 letters'), findsOneWidget);
   });
 
   testWidgets('starting a game uses the correct GameConfig for the '
@@ -146,7 +147,7 @@ void main() {
     await tester.tap(find.text('Start Game'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Cow Bull Quest · 6 letters'), findsOneWidget);
+    expect(find.bySemanticsLabel('Guess input, 6 letters'), findsOneWidget);
     // Attempts limit for 6-letter games (GameConfig.forSelection).
     expect(find.textContaining('20'), findsWidgets);
   });
@@ -179,7 +180,11 @@ void main() {
     await tester.tap(find.text('Start Game'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Easy'), findsAtLeastNWidgets(1));
+    // The status panel's difficulty chip renders as rich text.
+    expect(
+      find.textContaining('Easy', findRichText: true),
+      findsAtLeastNWidgets(1),
+    );
   });
 
   testWidgets('How to Play opens the Rules screen', (tester) async {
@@ -294,7 +299,7 @@ void main() {
     await tester.tap(find.text('Start Game'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Cow Bull Quest · 4 letters'), findsOneWidget);
+    expect(find.bySemanticsLabel('Guess input, 4 letters'), findsOneWidget);
   });
 
   testWidgets('opening Rules does not construct a GameController', (
@@ -745,10 +750,7 @@ void main() {
         await tester.tap(find.text('Start Game'), warnIfMissed: false);
         await tester.pumpAndSettle();
 
-        expect(
-          find.textContaining('Cow Bull Quest · 4 letters'),
-          findsOneWidget,
-        );
+        expect(find.bySemanticsLabel('Guess input, 4 letters'), findsOneWidget);
 
         // A single pop reaches Home — if two routes had stacked, one pop
         // would still leave a second Game screen showing.

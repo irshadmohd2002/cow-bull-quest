@@ -129,12 +129,7 @@ class _GameScreenState extends State<GameScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Cow Bull Quest · ${widget.config.wordLength} letters · '
-          '${_difficultyLabel(widget.config.difficulty)}',
-        ),
-      ),
+      appBar: AppBar(title: const Text('Cow Bull Quest')),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),

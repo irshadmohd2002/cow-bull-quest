@@ -83,6 +83,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
+    // Tightens segment padding on narrow devices (e.g. 320-wide) so the
+    // FittedBox-scaled labels in [_SegmentLabel] have as much room as
+    // possible before needing to shrink at all.
+    final segmentHorizontalPadding = MediaQuery.sizeOf(context).width < 360
+        ? AppSpacing.xs
+        : AppSpacing.sm;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Cow Bull Quest')),
@@ -92,33 +98,8 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ExcludeSemantics(
-                    child: Icon(
-                      Icons.track_changes,
-                      color: colorScheme.primary,
-                      size: 32,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Flexible(
-                    child: Semantics(
-                      header: true,
-                      child: Text(
-                        'Cow Bull Quest',
-                        style: textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.primary,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
+              const _HomeHeroCard(),
+              const SizedBox(height: AppSpacing.lg),
               Text(
                 'Guess the secret word. Each guess earns a bull for every '
                 'letter that is correct and in the right position, and a '
@@ -142,11 +123,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         container: true,
                         label: 'Word length selection',
                         child: SegmentedButton<int>(
+                          style: SegmentedButton.styleFrom(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: segmentHorizontalPadding,
+                            ),
+                          ),
                           segments: [
                             for (final length in HomeScreen._wordLengthOptions)
                               ButtonSegment(
                                 value: length,
-                                label: Text('$length letters'),
+                                label: _SegmentLabel('$length letters'),
                               ),
                           ],
                           selected: {_selectedWordLength},
@@ -188,11 +174,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         container: true,
                         label: 'Difficulty selection',
                         child: SegmentedButton<DifficultyOption>(
+                          style: SegmentedButton.styleFrom(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: segmentHorizontalPadding,
+                            ),
+                          ),
                           segments: [
                             for (final option in DifficultyOption.values)
                               ButtonSegment(
                                 value: option,
-                                label: Text(_difficultyLabel(option)),
+                                label: _SegmentLabel(_difficultyLabel(option)),
                               ),
                           ],
                           selected: {_selectedDifficulty},
@@ -340,6 +331,125 @@ class _DifficultyDescriptionRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A segmented-button label that always stays on one line.
+///
+/// Root cause of the "Common" (and "4 letters"/etc.) wrapping bug: at
+/// narrow widths or large text-scale factors, a segment's available width
+/// can be less than its label's natural single-line width, and a plain
+/// [Text] (which defaults to wrapping) breaks onto a second line instead of
+/// shrinking. [maxLines]/[softWrap] here force the [Text] to only ever
+/// consider a single line, and the surrounding [FittedBox] then uniformly
+/// scales that single line down to fit whatever width the segment actually
+/// has, so it never wraps and never overflows/clips. A small,
+/// selector-specific font size ([TextTheme.labelMedium], smaller than the
+/// segmented button's own default label style) reduces how often that
+/// scaling has to kick in at all, but is deliberately not relied on as the
+/// only safeguard. The underlying [Text.data] — and therefore the
+/// semantics label the platform announces for this segment — is unchanged
+/// by the visual scaling, so the full, complete label is still announced.
+class _SegmentLabel extends StatelessWidget {
+  const _SegmentLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.center,
+      child: Text(
+        text,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.visible,
+        style: Theme.of(context).textTheme.labelMedium,
+      ),
+    );
+  }
+}
+
+/// A compact, branded header card: the approved launcher-icon emblem next
+/// to the app title and a short tagline, on a small navy/royal-blue
+/// gradient surface — the app's one deliberately-branded, non-flat surface
+/// (see CLAUDE.md Part 6: built-in [Container]/[BoxDecoration] gradients are
+/// acceptable for a small number of surfaces like this one).
+///
+/// The icon is purely decorative here — [ExcludeSemantics] keeps it out of
+/// the accessibility tree — because the adjacent [Semantics.header] title
+/// text already announces "Cow Bull Quest" once; without that exclusion a
+/// screen reader would announce the app name twice in a row for no benefit.
+class _HomeHeroCard extends StatelessWidget {
+  const _HomeHeroCard();
+
+  static const Color _heroForeground = Color(0xFFF8F4E8);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
+    final isDark = theme.brightness == Brightness.dark;
+    // Kept modest and responsive so the emblem never dominates the page: a
+    // little smaller on narrow phones, capped well below the hero card's
+    // own height on any device.
+    final iconSize = MediaQuery.sizeOf(context).width < 360 ? 44.0 : 52.0;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? const [Color(0xFF0B1026), Color(0xFF153B8C)]
+              : const [Color(0xFF153B8C), Color(0xFF2560C7)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          ExcludeSemantics(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.asset(
+                'assets/branding/cow_bull_quest_icon.png',
+                width: iconSize,
+                height: iconSize,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    'Cow Bull Quest',
+                    style: textTheme.headlineSmall?.copyWith(
+                      color: _heroForeground,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'A word-guessing game of bulls and cows.',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: _heroForeground.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

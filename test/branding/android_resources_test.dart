@@ -139,7 +139,15 @@ void main() {
       final pubspec = File('pubspec.yaml').readAsStringSync();
       expect(pubspec, isNot(contains('cow_bull_quest_ui_mockup')));
       expect(pubspec, isNot(contains('docs/design')));
-      expect(pubspec, isNot(contains('assets/branding')));
+    });
+
+    test('the branding icon is declared narrowly - the single icon file, '
+        'not the whole branding directory', () {
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      expect(pubspec, contains('assets/branding/cow_bull_quest_icon.png'));
+      // Narrow (one file), not a bare directory entry that would bundle
+      // everything ever added under assets/branding/.
+      expect(pubspec, isNot(contains('- assets/branding/\n')));
     });
 
     test('no Tricent (or other company) branding anywhere in app '

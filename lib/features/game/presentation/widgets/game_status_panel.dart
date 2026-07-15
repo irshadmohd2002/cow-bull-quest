@@ -7,19 +7,20 @@ import '../../controllers/game_controller_state.dart';
 /// attempts used, and attempts remaining, plus a supplementary (non-sole)
 /// visual progress bar.
 ///
-/// The stat chips scroll horizontally in a single fixed-height row rather
-/// than wrapping onto more lines as their (possibly large-scaled) text
-/// grows — that keeps this panel's height predictable regardless of text
-/// scale or how many chips there are, so it can never itself push the guess
-/// input off-screen. Because that row can scroll out of view,
-/// [_AttemptSummary] repeats the attempts-used/remaining figures as an
-/// always-visible, wrapping (never scrolling) line of text directly above
-/// the progress bar — the bar's textual equivalent. Its text scale is capped
-/// (not frozen, unlike the chip row above) at 1.3x: this whole panel sits
-/// outside the screen's one scrollable region (the guess history), so an
-/// unbounded cap here would eventually overflow the layout at extreme text
-/// scale — 1.3x still grows meaningfully larger than the base size while
-/// keeping that headroom bounded. The single [Semantics] label on the
+/// Word length and difficulty are shown as a fixed-height row of two stat
+/// chips. Attempts used/remaining are deliberately *not* also duplicated as
+/// chips here — [_AttemptSummary] below already states those same figures in
+/// full, always-visible text, so a third and fourth chip repeating them
+/// would be redundant and, at large text scale inside the chip row's fixed
+/// height, prone to clipping (e.g. "Attempts use…"). Keeping the chip row to
+/// just two short, unchanging labels means it fits without scrolling on
+/// realistic phone widths, even though it remains horizontally scrollable as
+/// a safety net for extreme text scale. [_AttemptSummary]'s text scale is
+/// capped (not frozen, unlike the chip row above) at 1.3x: this whole panel
+/// sits outside the screen's one scrollable region (the guess history), so
+/// an unbounded cap here would eventually overflow the layout at extreme
+/// text scale — 1.3x still grows meaningfully larger than the base size
+/// while keeping that headroom bounded. The single [Semantics] label on the
 /// container is the only accessible source for this information — the
 /// chips, summary text, and progress bar beneath it are marked
 /// [ExcludeSemantics] so a screen reader announces the status once, not
@@ -72,16 +73,6 @@ class GameStatusPanel extends StatelessWidget {
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     _StatChip(label: 'Difficulty', value: difficultyLabel),
-                    const SizedBox(width: AppSpacing.sm),
-                    _StatChip(
-                      label: 'Attempts used',
-                      value: '${view.attemptsUsed} / ${view.maxAttempts}',
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    _StatChip(
-                      label: 'Attempts remaining',
-                      value: '${view.attemptsRemaining}',
-                    ),
                   ],
                 ),
               ),

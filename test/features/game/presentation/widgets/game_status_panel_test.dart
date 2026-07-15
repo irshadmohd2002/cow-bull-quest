@@ -98,6 +98,22 @@ void main() {
     expect(find.text('3 of 10 attempts used · 7 remaining'), findsOneWidget);
   });
 
+  testWidgets(
+    'the chip row shows exactly word length and difficulty - no redundant, '
+    'clippable attempts chips',
+    (tester) async {
+      final view = _viewWith(attemptsUsed: 3, maxAttempts: 10);
+      await tester.pumpWidget(buildSubject(view, difficultyLabel: 'Hard'));
+
+      expect(find.byType(Chip), findsNWidgets(2));
+      expect(
+        find.textContaining('Word length', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Hard', findRichText: true), findsOneWidget);
+    },
+  );
+
   testWidgets('does not overflow under large text scaling', (tester) async {
     final view = _viewWith(attemptsUsed: 3, maxAttempts: 10);
     await tester.pumpWidget(

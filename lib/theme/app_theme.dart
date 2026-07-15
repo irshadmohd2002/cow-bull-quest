@@ -50,7 +50,10 @@ abstract final class AppTheme {
     );
     return _themeFor(
       colorScheme,
-      background: const Color(0xFFFAF7F1),
+      // A cool, pale blue-neutral near-white rather than a warm cream — it
+      // reads as a cleaner, crisper background and pairs better with the
+      // brand's navy/royal-blue/cyan identity than a warm tone does.
+      background: const Color(0xFFF3F6FC),
       statusColors: const AppStatusColors(
         success: Color(0xFF1E7A46),
         onSuccess: Colors.white,
@@ -118,12 +121,25 @@ abstract final class AppTheme {
       scaffoldBackgroundColor: background,
       extensions: [statusColors],
       appBarTheme: AppBarTheme(
-        backgroundColor: colorScheme.surface,
+        // Matches the scaffold background (rather than colorScheme.surface)
+        // so the AppBar blends into the screen instead of showing a hard
+        // white/navy edge; elevation/tint are zeroed so scrolling content
+        // can't reintroduce that seam under the AppBar.
+        backgroundColor: background,
         foregroundColor: colorScheme.onSurface,
-        surfaceTintColor: colorScheme.surfaceTint,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: false,
       ),
       cardTheme: CardThemeData(
+        // Explicit, rather than left to Material 3's default
+        // surfaceContainerLow: that role is never overridden below (only
+        // surfaceContainerHighest is, to keep the override list small), so
+        // it would otherwise fall back to a tone derived straight from the
+        // gold seed color — a warm, cream-tinted card that clashes with the
+        // brand's cool navy/blue surfaces instead of matching them.
+        color: colorScheme.surfaceContainerHighest,
         clipBehavior: Clip.antiAlias,
         elevation: 1,
         shape: RoundedRectangleBorder(

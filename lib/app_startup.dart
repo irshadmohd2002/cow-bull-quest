@@ -195,7 +195,13 @@ class _StartupLoadingApp extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const ExcludeSemantics(
-                  child: Icon(Icons.track_changes, size: 40),
+                  child: Image(
+                    image: AssetImage(
+                      'assets/branding/cow_bull_quest_icon.png',
+                    ),
+                    width: 40,
+                    height: 40,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 const CircularProgressIndicator(),
