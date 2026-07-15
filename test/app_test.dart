@@ -900,4 +900,147 @@ void main() {
       expect(find.textContaining('No completed games yet'), findsOneWidget);
     });
   });
+
+  group('Privacy Policy composition', () {
+    testWidgets(
+      'Settings shows a disabled Privacy Policy row while the configured '
+      'URL is the placeholder (the default)',
+      (tester) async {
+        await tester.pumpWidget(
+          CowBullApp(wordRepository: _FakeWordRepository()),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Settings'));
+        await tester.tap(find.text('Settings'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Privacy Policy'), findsOneWidget);
+        expect(find.text('Available before public release.'), findsOneWidget);
+      },
+    );
+
+    testWidgets('a non-HTTPS configured URL also keeps the row disabled', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: _FakeWordRepository(),
+          privacyPolicyUrl: 'http://cowbullquest.example/privacy',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Settings'));
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Available before public release.'), findsOneWidget);
+    });
+
+    testWidgets(
+      'a release-ready URL enables the row and tapping it invokes the '
+      'injected launcher exactly once with that URL',
+      (tester) async {
+        var callCount = 0;
+        Uri? launchedUri;
+        await tester.pumpWidget(
+          CowBullApp(
+            wordRepository: _FakeWordRepository(),
+            privacyPolicyUrl: 'https://cowbullquest.example/privacy',
+            urlLauncher: (uri) async {
+              callCount++;
+              launchedUri = uri;
+              return true;
+            },
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Settings'));
+        await tester.tap(find.text('Settings'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('View how Cow Bull Quest handles local data.'),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('Privacy Policy'));
+        await tester.pumpAndSettle();
+
+        expect(callCount, 1);
+        expect(launchedUri, Uri.parse('https://cowbullquest.example/privacy'));
+      },
+    );
+
+    testWidgets(
+      'shows a friendly message, never a raw error, when the launcher '
+      'reports failure',
+      (tester) async {
+        await tester.pumpWidget(
+          CowBullApp(
+            wordRepository: _FakeWordRepository(),
+            privacyPolicyUrl: 'https://cowbullquest.example/privacy',
+            urlLauncher: (uri) async => false,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Settings'));
+        await tester.tap(find.text('Settings'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Privacy Policy'));
+        // Deliberately not pumpAndSettle: the shown SnackBar auto-dismisses
+        // on its own timer, and pumpAndSettle would pump straight through
+        // that entire lifecycle. A couple of bounded pumps is enough to let
+        // the async launch attempt finish and the SnackBar's entrance
+        // animation complete, while it's still on screen to assert against.
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 750));
+
+        expect(tester.takeException(), isNull);
+        expect(
+          find.text(
+            "Couldn't open the privacy policy. Please try again later.",
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'shows a friendly message, never a raw error, when the launcher '
+      'throws',
+      (tester) async {
+        await tester.pumpWidget(
+          CowBullApp(
+            wordRepository: _FakeWordRepository(),
+            privacyPolicyUrl: 'https://cowbullquest.example/privacy',
+            urlLauncher: (uri) async =>
+                throw StateError('platform channel unavailable'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Settings'));
+        await tester.tap(find.text('Settings'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Privacy Policy'));
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 750));
+
+        expect(tester.takeException(), isNull);
+        expect(
+          find.text(
+            "Couldn't open the privacy policy. Please try again later.",
+          ),
+          findsOneWidget,
+        );
+        expect(find.textContaining('StateError'), findsNothing);
+      },
+    );
+  });
 }

@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart' as url_launcher_pkg;
 
 import 'app_settings.dart';
 import 'core/persistence/shared_preferences_store.dart';
+import 'core/privacy_policy.dart' as privacy_policy_config;
 import 'features/game/controllers/game_controller.dart';
 import 'features/game/data/asset_word_repository.dart';
 import 'features/game/data/word_repository.dart';
@@ -34,6 +36,21 @@ GameDifficulty _toGameDifficulty(DifficultyOption option) => switch (option) {
   DifficultyOption.common => GameDifficulty.common,
   DifficultyOption.hard => GameDifficulty.hard,
 };
+
+/// Opens [url] externally (the platform browser, or an equivalent external
+/// handler), returning whether the launch succeeded.
+///
+/// Exists as its own function type — rather than calling
+/// `package:url_launcher` directly wherever a link is opened — so
+/// [CowBullApp.urlLauncher] can substitute a fake in tests without needing a
+/// real platform channel, the same test-seam pattern already used for
+/// [CowBullApp.wordRepository] and [CowBullApp.statisticsRepository].
+typedef UrlLauncher = Future<bool> Function(Uri url);
+
+Future<bool> _launchUrlExternally(Uri url) => url_launcher_pkg.launchUrl(
+  url,
+  mode: url_launcher_pkg.LaunchMode.externalApplication,
+);
 
 /// The app's composition root.
 ///
@@ -81,10 +98,15 @@ class CowBullApp extends StatefulWidget {
     WordRepository? wordRepository,
     this.settings,
     StatisticsRepository? statisticsRepository,
+    String? privacyPolicyUrl,
+    UrlLauncher? urlLauncher,
   }) : wordRepository = wordRepository ?? AssetWordRepository(),
        statisticsRepository =
            statisticsRepository ??
-           LocalStatisticsRepository(store: const SharedPreferencesStore());
+           LocalStatisticsRepository(store: const SharedPreferencesStore()),
+       privacyPolicyUrl =
+           privacyPolicyUrl ?? privacy_policy_config.privacyPolicyUrl,
+       urlLauncher = urlLauncher ?? _launchUrlExternally;
 
   final WordRepository wordRepository;
 
@@ -102,6 +124,19 @@ class CowBullApp extends StatefulWidget {
   /// defaults to a real, persistence-capable repository even when not
   /// injected.
   final StatisticsRepository statisticsRepository;
+
+  /// The privacy-policy URL Settings' "Privacy Policy" item opens, or
+  /// `null` to use the app's single, centrally-configured
+  /// `core/privacy_policy.dart#privacyPolicyUrl`. Overridable only so tests
+  /// can exercise the "release-ready URL" path without editing that central
+  /// constant; the shipped app always uses the default.
+  final String privacyPolicyUrl;
+
+  /// Opens an external URL (the "Privacy Policy" item's action), or `null`
+  /// to use the real platform-browser launcher. Overridable so tests can
+  /// substitute a fake without a real platform channel; the shipped app
+  /// always uses the default.
+  final UrlLauncher urlLauncher;
 
   @override
   State<CowBullApp> createState() => _CowBullAppState();
@@ -284,10 +319,48 @@ class _CowBullAppState extends State<CowBullApp> {
           builder: (context, _) => SettingsScreen(
             themePreference: _settings.themePreference,
             onThemePreferenceChanged: _settings.setThemePreference,
+            onOpenPrivacyPolicy:
+                privacy_policy_config.isReleaseReadyPrivacyPolicyUrl(
+                  widget.privacyPolicyUrl,
+                )
+                ? () => _openPrivacyPolicy(context)
+                : null,
           ),
         ),
       ),
     );
+  }
+
+  /// Launches [CowBullApp.privacyPolicyUrl] via [CowBullApp.urlLauncher].
+  /// Only ever wired up as the Settings "Privacy Policy" action when
+  /// [privacy_policy_config.isReleaseReadyPrivacyPolicyUrl] already
+  /// confirmed the URL is well-formed HTTPS, so this never needs to
+  /// re-validate it.
+  ///
+  /// A launch that fails — the platform reports it couldn't be opened, or
+  /// [CowBullApp.urlLauncher] throws — shows a brief, friendly snack bar
+  /// rather than surfacing the raw failure or exception, and never leaves
+  /// the app in a broken state.
+  void _openPrivacyPolicy(BuildContext context) {
+    unawaited(_launchPrivacyPolicy(context));
+  }
+
+  Future<void> _launchPrivacyPolicy(BuildContext context) async {
+    var launched = false;
+    try {
+      launched = await widget.urlLauncher(Uri.parse(widget.privacyPolicyUrl));
+    } catch (_) {
+      launched = false;
+    }
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Couldn't open the privacy policy. Please try again later.",
+          ),
+        ),
+      );
+    }
   }
 
   /// Opens the Statistics screen, kicking off a [StatisticsController.load]
