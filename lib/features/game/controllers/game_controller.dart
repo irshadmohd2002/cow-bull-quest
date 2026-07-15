@@ -69,6 +69,13 @@ class GameController extends ChangeNotifier {
   int _requestGeneration = 0;
   bool _disposed = false;
 
+  /// The normalized (lowercase) allowed-guess dictionary for the active
+  /// session's word length, loaded once alongside the secret word in
+  /// [startGame] and reused for every [submitGuess] call in that session —
+  /// so guess validation never re-reads the word-list asset mid-game. `null`
+  /// whenever no session is active.
+  Set<String>? _allowedGuesses;
+
   /// Test-only seam: whether an internal session currently exists.
   /// Deliberately exposes a bare `bool` rather than the [GameSession]
   /// itself, so tests can verify session-lifecycle invariants (e.g. that a
@@ -109,20 +116,29 @@ class GameController extends ChangeNotifier {
     final generation = ++_requestGeneration;
     _currentConfig = config;
     _session = null;
+    _allowedGuesses = null;
     _activeCompletionId = null;
     _setState(GameLoading(config));
 
     try {
-      final secretWord = await _wordRepository.selectSecretWord(
+      // Both requests are started before either is awaited, so they run
+      // concurrently rather than sequentially.
+      final secretWordFuture = _wordRepository.selectSecretWord(
         config.wordLength,
         config.difficulty,
       );
+      final allowedWordsFuture = _wordRepository.loadAllowedWords(
+        config.wordLength,
+      );
+      final secretWord = await secretWordFuture;
+      final allowedWords = await allowedWordsFuture;
       final session = _gameEngine.startGame(
         secretWord: secretWord,
         config: config,
       );
       if (_disposed || generation != _requestGeneration) return;
       _session = session;
+      _allowedGuesses = Set.unmodifiable(allowedWords);
       // Generated exactly once per successful start, only reachable past
       // the generation/disposal guard above, so neither a stale nor a
       // post-disposal completion can assign — or reassign — this.
@@ -167,10 +183,13 @@ class GameController extends ChangeNotifier {
     if (current is! GameActive) return;
     final session = _session;
     if (session == null) return;
+    final allowedGuesses = _allowedGuesses;
+    if (allowedGuesses == null) return;
 
     final submission = _gameEngine.submitGuess(
       session: session,
       rawGuess: rawGuess,
+      allowedGuesses: allowedGuesses,
     );
     _session = submission.session;
 

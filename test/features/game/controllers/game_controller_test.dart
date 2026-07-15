@@ -29,12 +29,25 @@ class _FakeWordRepository implements WordRepository {
   /// tests can assert it was preserved end-to-end.
   StackTrace? lastThrownStackTrace;
 
+  /// Words [loadAllowedWords] returns, keyed by word length. Seeded with
+  /// every real guess literal this file submits via [submitGuess] so tests
+  /// that don't care about dictionary validation don't need to register
+  /// anything themselves; tests exercising rejection use a word (e.g.
+  /// `qzxj`) deliberately absent from this set.
+  final Map<int, Set<String>> allowedWordsByLength = {
+    4: {'lace', 'race', 'mace', 'mock', 'tace'},
+  };
+
   /// Convenience: registers [word] for [wordLength] under every
   /// [GameDifficulty], for tests that don't care which difficulty is used.
+  /// Also adds [word] to [allowedWordsByLength], matching the real
+  /// `WordRepository` invariant that every secret word is itself a member
+  /// of its length's allowed-guess dictionary.
   void registerWordForAllDifficulties(int wordLength, String word) {
     for (final difficulty in GameDifficulty.values) {
       wordsByLengthAndDifficulty[(wordLength, difficulty)] = word;
     }
+    allowedWordsByLength.putIfAbsent(wordLength, () => {}).add(word);
   }
 
   @override
@@ -68,7 +81,8 @@ class _FakeWordRepository implements WordRepository {
   }
 
   @override
-  Future<List<String>> loadAllowedWords(int wordLength) async => const [];
+  Future<List<String>> loadAllowedWords(int wordLength) async =>
+      List.unmodifiable(allowedWordsByLength[wordLength] ?? const <String>{});
 
   @override
   Future<List<String>> loadSecretWords(
@@ -537,6 +551,138 @@ void main() {
       controller.submitGuess('mace');
       final completed = controller.state as GameCompleted;
       expect(completed.session.status, GameStatus.lost);
+    });
+  });
+
+  group('GameController dictionary validation', () {
+    test('a guess absent from the allowed-guess dictionary is rejected as '
+        'notInDictionary, without hard-coding any specific word', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(config4);
+
+      // 'qzxj' is alphabetic and exactly 4 letters, so it clears every
+      // format check and is rejected purely for dictionary absence — it
+      // is deliberately absent from the fake repository's allowed words.
+      controller.submitGuess('qzxj');
+
+      final active = controller.state as GameActive;
+      expect(active.lastRejection, GuessValidationFailure.notInDictionary);
+    });
+
+    test('a dictionary-rejected guess does not consume an attempt', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(config4);
+
+      controller.submitGuess('qzxj');
+
+      final active = controller.state as GameActive;
+      expect(active.view.attemptsUsed, 0);
+      expect(active.view.attemptsRemaining, 10);
+    });
+
+    test('a dictionary-rejected guess is not added to guess history', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(config4);
+
+      controller.submitGuess('qzxj');
+
+      final active = controller.state as GameActive;
+      expect(active.view.guesses, isEmpty);
+    });
+
+    test('an alphabetic, correct-length guess not in the dictionary is still '
+        'rejected even when every letter individually is valid', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(config4);
+
+      controller.submitGuess('abcd');
+
+      final active = controller.state as GameActive;
+      expect(active.lastRejection, GuessValidationFailure.notInDictionary);
+      expect(active.view.attemptsUsed, 0);
+      expect(active.view.guesses, isEmpty);
+    });
+
+    test('a guess present in the allowed-guess dictionary is accepted and '
+        'consumes an attempt', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(config4);
+
+      controller.submitGuess('race');
+
+      final active = controller.state as GameActive;
+      expect(active.lastRejection, isNull);
+      expect(active.view.attemptsUsed, 1);
+      expect(active.view.guesses, hasLength(1));
+    });
+
+    test('two consecutive valid dictionary words are both accepted', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(config4);
+
+      controller.submitGuess('race');
+      controller.submitGuess('mace');
+
+      final active = controller.state as GameActive;
+      expect(active.lastRejection, isNull);
+      expect(active.view.attemptsUsed, 2);
+      expect(active.view.guesses, hasLength(2));
+    });
+
+    test('the controller passes the repository-loaded allowed-word set through '
+        'to validation, not a hard-coded list', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace')
+        ..allowedWordsByLength[4] = {'lace', 'zzzz'};
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(config4);
+
+      // 'race' is a real word but was excluded from this repository's
+      // allowed set, so it must be rejected even though it would be
+      // accepted with the default fake configuration.
+      controller.submitGuess('race');
+      expect(
+        (controller.state as GameActive).lastRejection,
+        GuessValidationFailure.notInDictionary,
+      );
+
+      // 'zzzz' was explicitly included, despite not being a real word —
+      // proving the controller defers entirely to the repository's data.
+      controller.submitGuess('zzzz');
+      expect((controller.state as GameActive).lastRejection, isNull);
     });
   });
 

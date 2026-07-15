@@ -17,6 +17,12 @@ void main() {
     difficulty: GameDifficulty.easy,
   );
 
+  // The allowed-guess dictionaries these tests submit against. Every
+  // well-formed guess literal used below (by length) must appear here, or
+  // it will be rejected as notInDictionary rather than scored.
+  const allowed5 = {'crane', 'canoe', 'aaaaa', 'bbbbb', 'grape'};
+  const allowed4 = {'lace', 'race', 'mace', 'pace'};
+
   group('GameEngine.startGame', () {
     test('starts with empty history and in-progress status', () {
       final session = engine.startGame(secretWord: 'crane', config: config5);
@@ -49,6 +55,7 @@ void main() {
       final submission = engine.submitGuess(
         session: session,
         rawGuess: 'CRANE',
+        allowedGuesses: allowed5,
       );
       expect(submission, isA<GuessAccepted>());
       final accepted = submission as GuessAccepted;
@@ -60,6 +67,7 @@ void main() {
       final submission = engine.submitGuess(
         session: session,
         rawGuess: 'canoe',
+        allowedGuesses: allowed5,
       );
       final accepted = submission as GuessAccepted;
       // secret: crane (c,r,a,n,e), guess: canoe (c,a,n,o,e)
@@ -72,13 +80,21 @@ void main() {
     test('preserves earlier history when a new guess is added', () {
       var session = engine.startGame(secretWord: 'crane', config: config5);
       session =
-          (engine.submitGuess(session: session, rawGuess: 'aaaaa')
+          (engine.submitGuess(
+                    session: session,
+                    rawGuess: 'aaaaa',
+                    allowedGuesses: allowed5,
+                  )
                   as GuessAccepted)
               .session;
       final firstGuess = session.guesses.single;
 
       session =
-          (engine.submitGuess(session: session, rawGuess: 'bbbbb')
+          (engine.submitGuess(
+                    session: session,
+                    rawGuess: 'bbbbb',
+                    allowedGuesses: allowed5,
+                  )
                   as GuessAccepted)
               .session;
 
@@ -93,6 +109,7 @@ void main() {
       final submission = engine.submitGuess(
         session: session,
         rawGuess: 'cr4ne',
+        allowedGuesses: allowed5,
       );
       expect(submission, isA<GuessRejected>());
       expect(
@@ -107,6 +124,7 @@ void main() {
       final submission = engine.submitGuess(
         session: session,
         rawGuess: 'crane',
+        allowedGuesses: allowed5,
       );
       final accepted = submission as GuessAccepted;
       expect(accepted.session.status, GameStatus.won);
@@ -115,7 +133,11 @@ void main() {
     test('the winning guess itself is recorded in history', () {
       final session = engine.startGame(secretWord: 'crane', config: config5);
       final accepted =
-          engine.submitGuess(session: session, rawGuess: 'crane')
+          engine.submitGuess(
+                session: session,
+                rawGuess: 'crane',
+                allowedGuesses: allowed5,
+              )
               as GuessAccepted;
       expect(accepted.session.guesses, hasLength(1));
       expect(
@@ -127,13 +149,18 @@ void main() {
     test('guesses submitted after winning are rejected', () {
       final session = engine.startGame(secretWord: 'crane', config: config5);
       final wonSession =
-          (engine.submitGuess(session: session, rawGuess: 'crane')
+          (engine.submitGuess(
+                    session: session,
+                    rawGuess: 'crane',
+                    allowedGuesses: allowed5,
+                  )
                   as GuessAccepted)
               .session;
 
       final submission = engine.submitGuess(
         session: wonSession,
         rawGuess: 'grape',
+        allowedGuesses: allowed5,
       );
 
       expect(submission, isA<GuessRejected>());
@@ -152,6 +179,7 @@ void main() {
       final submission = engine.submitGuess(
         session: originalSession,
         rawGuess: 'grape',
+        allowedGuesses: allowed5,
       );
       final newSession = (submission as GuessAccepted).session;
 
@@ -166,7 +194,11 @@ void main() {
         secretWord: 'crane',
         config: config5,
       );
-      engine.submitGuess(session: originalSession, rawGuess: '123');
+      engine.submitGuess(
+        session: originalSession,
+        rawGuess: '123',
+        allowedGuesses: allowed5,
+      );
 
       expect(originalSession.guesses, isEmpty);
       expect(originalSession.status, GameStatus.inProgress);
@@ -182,6 +214,7 @@ void main() {
         final submission = engine.submitGuess(
           session: originalSession,
           rawGuess: 'cr4ne',
+          allowedGuesses: allowed5,
         );
         expect(submission, isA<GuessRejected>());
         expect(identical(submission.session, originalSession), isTrue);
@@ -196,9 +229,78 @@ void main() {
       final submission = engine.submitGuess(
         session: originalSession,
         rawGuess: 'grape',
+        allowedGuesses: allowed5,
       );
       expect(submission, isA<GuessAccepted>());
       expect(identical(submission.session, originalSession), isFalse);
+    });
+  });
+
+  group('GameEngine dictionary validation', () {
+    test('rejects a well-formed guess absent from the allowed-guess dictionary '
+        'as notInDictionary, without hard-coding any specific word', () {
+      final session = engine.startGame(secretWord: 'lace', config: config4);
+      // 'qzxj' is alphabetic and exactly 4 letters, so it clears every
+      // format check and is rejected purely for dictionary absence.
+      final submission = engine.submitGuess(
+        session: session,
+        rawGuess: 'qzxj',
+        allowedGuesses: allowed4,
+      );
+      expect(submission, isA<GuessRejected>());
+      expect(
+        (submission as GuessRejected).reason,
+        GuessValidationFailure.notInDictionary,
+      );
+    });
+
+    test('a dictionary-rejected guess consumes no attempt', () {
+      final session = engine.startGame(secretWord: 'lace', config: config4);
+      final submission = engine.submitGuess(
+        session: session,
+        rawGuess: 'qzxj',
+        allowedGuesses: allowed4,
+      );
+      final rejected = submission as GuessRejected;
+      expect(rejected.session.attemptsUsed, 0);
+      expect(rejected.session.attemptsRemaining, 10);
+    });
+
+    test('a dictionary-rejected guess is never added to history', () {
+      final session = engine.startGame(secretWord: 'lace', config: config4);
+      final submission = engine.submitGuess(
+        session: session,
+        rawGuess: 'qzxj',
+        allowedGuesses: allowed4,
+      );
+      expect(submission.session.guesses, isEmpty);
+    });
+
+    test('a well-formed guess made of otherwise-valid letters is still '
+        'rejected when it is not itself in the dictionary', () {
+      final session = engine.startGame(secretWord: 'lace', config: config4);
+      final submission = engine.submitGuess(
+        session: session,
+        rawGuess: 'abcd',
+        allowedGuesses: allowed4,
+      );
+      expect(submission, isA<GuessRejected>());
+      expect(
+        (submission as GuessRejected).reason,
+        GuessValidationFailure.notInDictionary,
+      );
+    });
+
+    test('a guess present in the allowed dictionary is accepted and '
+        'consumes an attempt', () {
+      final session = engine.startGame(secretWord: 'lace', config: config4);
+      final submission = engine.submitGuess(
+        session: session,
+        rawGuess: 'race',
+        allowedGuesses: allowed4,
+      );
+      expect(submission, isA<GuessAccepted>());
+      expect(submission.session.attemptsUsed, 1);
     });
   });
 
@@ -206,7 +308,11 @@ void main() {
     test('a valid incorrect guess consumes exactly one attempt', () {
       final session = engine.startGame(secretWord: 'lace', config: config4);
       final accepted =
-          engine.submitGuess(session: session, rawGuess: 'race')
+          engine.submitGuess(
+                session: session,
+                rawGuess: 'race',
+                allowedGuesses: allowed4,
+              )
               as GuessAccepted;
       expect(accepted.session.attemptsUsed, 1);
       expect(accepted.session.attemptsRemaining, 9);
@@ -215,7 +321,11 @@ void main() {
     test('an invalid guess consumes no attempt', () {
       final session = engine.startGame(secretWord: 'lace', config: config4);
       final rejected =
-          engine.submitGuess(session: session, rawGuess: 'toolong')
+          engine.submitGuess(
+                session: session,
+                rawGuess: 'toolong',
+                allowedGuesses: allowed4,
+              )
               as GuessRejected;
       expect(rejected.session.attemptsUsed, 0);
       expect(rejected.session.attemptsRemaining, 10);
@@ -225,7 +335,11 @@ void main() {
       var session = engine.startGame(secretWord: 'lace', config: config4);
       for (final guess in ['race', 'mace', 'pace']) {
         session =
-            (engine.submitGuess(session: session, rawGuess: guess)
+            (engine.submitGuess(
+                      session: session,
+                      rawGuess: guess,
+                      allowedGuesses: allowed4,
+                    )
                     as GuessAccepted)
                 .session;
       }
@@ -237,11 +351,19 @@ void main() {
     test('a correct guess before the final attempt wins', () {
       var session = engine.startGame(secretWord: 'lace', config: config4);
       session =
-          (engine.submitGuess(session: session, rawGuess: 'race')
+          (engine.submitGuess(
+                    session: session,
+                    rawGuess: 'race',
+                    allowedGuesses: allowed4,
+                  )
                   as GuessAccepted)
               .session;
       session =
-          (engine.submitGuess(session: session, rawGuess: 'lace')
+          (engine.submitGuess(
+                    session: session,
+                    rawGuess: 'lace',
+                    allowedGuesses: allowed4,
+                  )
                   as GuessAccepted)
               .session;
       expect(session.status, GameStatus.won);
@@ -253,14 +375,22 @@ void main() {
       // Exhaust 9 of 10 attempts with wrong guesses.
       for (var i = 0; i < 9; i++) {
         session =
-            (engine.submitGuess(session: session, rawGuess: 'race')
+            (engine.submitGuess(
+                      session: session,
+                      rawGuess: 'race',
+                      allowedGuesses: allowed4,
+                    )
                     as GuessAccepted)
                 .session;
       }
       expect(session.attemptsRemaining, 1);
 
       final finalSubmission =
-          engine.submitGuess(session: session, rawGuess: 'lace')
+          engine.submitGuess(
+                session: session,
+                rawGuess: 'lace',
+                allowedGuesses: allowed4,
+              )
               as GuessAccepted;
       expect(finalSubmission.session.status, GameStatus.won);
       expect(finalSubmission.session.attemptsUsed, 10);
@@ -271,14 +401,22 @@ void main() {
       var session = engine.startGame(secretWord: 'lace', config: config4);
       for (var i = 0; i < 9; i++) {
         session =
-            (engine.submitGuess(session: session, rawGuess: 'race')
+            (engine.submitGuess(
+                      session: session,
+                      rawGuess: 'race',
+                      allowedGuesses: allowed4,
+                    )
                     as GuessAccepted)
                 .session;
       }
       expect(session.attemptsRemaining, 1);
 
       final finalSubmission =
-          engine.submitGuess(session: session, rawGuess: 'mace')
+          engine.submitGuess(
+                session: session,
+                rawGuess: 'mace',
+                allowedGuesses: allowed4,
+              )
               as GuessAccepted;
       expect(finalSubmission.session.status, GameStatus.lost);
       expect(finalSubmission.session.attemptsUsed, 10);
@@ -289,13 +427,21 @@ void main() {
       var session = engine.startGame(secretWord: 'lace', config: config4);
       for (var i = 0; i < 10; i++) {
         session =
-            (engine.submitGuess(session: session, rawGuess: 'race')
+            (engine.submitGuess(
+                      session: session,
+                      rawGuess: 'race',
+                      allowedGuesses: allowed4,
+                    )
                     as GuessAccepted)
                 .session;
       }
       expect(session.status, GameStatus.lost);
 
-      final submission = engine.submitGuess(session: session, rawGuess: 'lace');
+      final submission = engine.submitGuess(
+        session: session,
+        rawGuess: 'lace',
+        allowedGuesses: allowed4,
+      );
       expect(submission, isA<GuessRejected>());
       expect(
         (submission as GuessRejected).reason,

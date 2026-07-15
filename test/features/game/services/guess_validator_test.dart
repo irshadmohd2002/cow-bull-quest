@@ -4,12 +4,18 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   const validator = GuessValidator();
+  const defaultAllowedGuesses = {'crane'};
 
-  GuessValidation validate(String rawGuess, {int secretWordLength = 5}) {
+  GuessValidation validate(
+    String rawGuess, {
+    int secretWordLength = 5,
+    Set<String> allowedGuesses = defaultAllowedGuesses,
+  }) {
     return validator.validate(
       rawGuess: rawGuess,
       secretWordLength: secretWordLength,
       status: GameStatus.inProgress,
+      allowedGuesses: allowedGuesses,
     );
   }
 
@@ -82,6 +88,7 @@ void main() {
         rawGuess: 'crane',
         secretWordLength: 5,
         status: GameStatus.won,
+        allowedGuesses: defaultAllowedGuesses,
       );
       expect(
         (result as InvalidGuess).reason,
@@ -94,10 +101,98 @@ void main() {
         rawGuess: 'crane',
         secretWordLength: 5,
         status: GameStatus.lost,
+        allowedGuesses: defaultAllowedGuesses,
       );
       expect(
         (result as InvalidGuess).reason,
         GuessValidationFailure.gameAlreadyLost,
+      );
+    });
+  });
+
+  group('GuessValidator dictionary check', () {
+    test('rejects a well-formed guess absent from the allowed-guess dictionary '
+        'as notInDictionary', () {
+      final result = validate(
+        'qzxj',
+        secretWordLength: 4,
+        allowedGuesses: const {'lace'},
+      );
+      expect(
+        (result as InvalidGuess).reason,
+        GuessValidationFailure.notInDictionary,
+      );
+    });
+
+    test('rejects an alphabetic, correct-length guess not in the dictionary '
+        'even though every individual letter is valid', () {
+      final result = validate(
+        'abcd',
+        secretWordLength: 4,
+        allowedGuesses: const {'lace'},
+      );
+      expect(
+        (result as InvalidGuess).reason,
+        GuessValidationFailure.notInDictionary,
+      );
+    });
+
+    test('accepts a guess present in the allowed-guess dictionary', () {
+      final result = validate(
+        'lace',
+        secretWordLength: 4,
+        allowedGuesses: const {'lace', 'race'},
+      );
+      expect(result, isA<ValidGuess>());
+      expect((result as ValidGuess).normalizedGuess, 'lace');
+    });
+
+    test('dictionary membership is checked case-insensitively against the '
+        'normalized (lowercase) allowed set', () {
+      final result = validate(
+        'LACE',
+        secretWordLength: 4,
+        allowedGuesses: const {'lace'},
+      );
+      expect(result, isA<ValidGuess>());
+      expect((result as ValidGuess).normalizedGuess, 'lace');
+    });
+
+    test(
+      'an empty allowed-guess dictionary rejects every well-formed guess',
+      () {
+        final result = validate(
+          'lace',
+          secretWordLength: 4,
+          allowedGuesses: const {},
+        );
+        expect(
+          (result as InvalidGuess).reason,
+          GuessValidationFailure.notInDictionary,
+        );
+      },
+    );
+
+    test('length and character-set failures take priority over dictionary '
+        'membership, so those reasons are never masked', () {
+      final tooShort = validate(
+        'ab',
+        secretWordLength: 4,
+        allowedGuesses: const {},
+      );
+      expect(
+        (tooShort as InvalidGuess).reason,
+        GuessValidationFailure.incorrectLength,
+      );
+
+      final nonAlphabetic = validate(
+        'ab3d',
+        secretWordLength: 4,
+        allowedGuesses: const {},
+      );
+      expect(
+        (nonAlphabetic as InvalidGuess).reason,
+        GuessValidationFailure.nonAlphabetic,
       );
     });
   });

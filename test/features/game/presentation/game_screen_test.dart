@@ -16,6 +16,14 @@ class _FakeWordRepository implements WordRepository {
   final Map<int, String> wordsByLength = {};
   Object? errorToThrow;
 
+  /// Words [loadAllowedWords] returns, keyed by word length. Seeded with
+  /// every real guess literal this file submits through the UI, so tests
+  /// that don't care about dictionary validation don't need to register
+  /// anything themselves.
+  final Map<int, Set<String>> allowedWordsByLength = {
+    4: {'lace', 'race', 'mock'},
+  };
+
   @override
   Future<String> selectSecretWord(
     int wordLength,
@@ -31,7 +39,8 @@ class _FakeWordRepository implements WordRepository {
   }
 
   @override
-  Future<List<String>> loadAllowedWords(int wordLength) async => const [];
+  Future<List<String>> loadAllowedWords(int wordLength) async =>
+      List.unmodifiable(allowedWordsByLength[wordLength] ?? const <String>{});
 
   @override
   Future<List<String>> loadSecretWords(
@@ -194,6 +203,42 @@ void main() {
     expect(find.text('Your guess must be exactly 4 letters.'), findsOneWidget);
     expect(find.textContaining('Attempts used: 0'), findsOneWidget);
   });
+
+  testWidgets(
+    'a guess absent from the allowed-guess dictionary is rejected with a '
+    'visible, accessible message and consumes no attempt or history row',
+    (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      // 'qzxj' is alphabetic and exactly 4 letters — it clears every format
+      // check — but is deliberately absent from the fake repository's
+      // allowed words, so it must be rejected for dictionary absence, not
+      // hard-coded as a special case anywhere in the app.
+      await enterAndSubmit(tester, 'qzxj');
+
+      expect(
+        find.text("That's not a word we recognize. Try another guess."),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(
+          "That's not a word we recognize. Try another guess.",
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Attempts used: 0'), findsOneWidget);
+      // No history row was added: the only guess-history related text on
+      // screen is the empty-state, never a scored 'Bulls:'/'Cows:' row.
+      expect(find.textContaining('Bulls:'), findsNothing);
+    },
+  );
 
   testWidgets('keyboard submit action works', (tester) async {
     final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';

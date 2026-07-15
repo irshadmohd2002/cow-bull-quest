@@ -27,6 +27,8 @@ String _validationMessage(GuessValidationFailure reason, int wordLength) {
       return 'Your guess must be exactly $wordLength letters.';
     case GuessValidationFailure.nonAlphabetic:
       return 'Guesses can only contain letters A-Z.';
+    case GuessValidationFailure.notInDictionary:
+      return "That's not a word we recognize. Try another guess.";
     case GuessValidationFailure.gameAlreadyWon:
       return 'You already won this game.';
     case GuessValidationFailure.gameAlreadyLost:

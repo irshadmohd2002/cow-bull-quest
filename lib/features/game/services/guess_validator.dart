@@ -14,6 +14,10 @@ enum GuessValidationFailure {
   /// The guess contains characters outside `a-z`/`A-Z`.
   nonAlphabetic,
 
+  /// The guess is the right length and purely alphabetic, but does not
+  /// appear in the allowed-guess dictionary for the secret word's length.
+  notInDictionary,
+
   /// The game has already been won; no further guesses are accepted.
   gameAlreadyWon,
 
@@ -52,17 +56,23 @@ final class InvalidGuess extends GuessValidation {
 /// Validates a raw guess string before it is scored.
 ///
 /// Checks run in a fixed order — already-won, then already-lost, then
-/// blank, then length, then character set — so exactly one
-/// [GuessValidationFailure] reason is ever reported per call.
+/// blank, then length, then character set, then dictionary membership — so
+/// exactly one [GuessValidationFailure] reason is ever reported per call.
 class GuessValidator {
   const GuessValidator();
 
-  /// Validates [rawGuess] against the length of the secret word and the
-  /// current [status] of the game.
+  /// Validates [rawGuess] against the length of the secret word, the
+  /// current [status] of the game, and [allowedGuesses] — the normalized
+  /// (lowercase) allowed-guess dictionary for [secretWordLength], which the
+  /// caller is responsible for sourcing from a `WordRepository`. A guess
+  /// that is blank, the wrong length, or contains non-alphabetic characters
+  /// is rejected before [allowedGuesses] is ever consulted, so dictionary
+  /// membership is only checked once a guess is otherwise well-formed.
   GuessValidation validate({
     required String rawGuess,
     required int secretWordLength,
     required GameStatus status,
+    required Set<String> allowedGuesses,
   }) {
     if (status == GameStatus.won) {
       return const InvalidGuess(GuessValidationFailure.gameAlreadyWon);
@@ -79,6 +89,10 @@ class GuessValidator {
     if (!_alphabeticOnly.hasMatch(rawGuess)) {
       return const InvalidGuess(GuessValidationFailure.nonAlphabetic);
     }
-    return ValidGuess(rawGuess.toLowerCase());
+    final normalizedGuess = rawGuess.toLowerCase();
+    if (!allowedGuesses.contains(normalizedGuess)) {
+      return const InvalidGuess(GuessValidationFailure.notInDictionary);
+    }
+    return ValidGuess(normalizedGuess);
   }
 }

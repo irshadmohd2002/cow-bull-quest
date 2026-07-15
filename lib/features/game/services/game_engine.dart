@@ -84,23 +84,27 @@ class GameEngine {
   }
 
   /// Validates, scores, and (if valid) records [rawGuess] against
-  /// [session].
+  /// [session]. [allowedGuesses] is the normalized (lowercase) allowed-guess
+  /// dictionary for [session]'s secret-word length, sourced by the caller
+  /// from a `WordRepository`.
   ///
   /// Returns [GuessRejected] without modifying [session] if the guess is
-  /// blank, the wrong length, contains non-alphabetic characters, or the
-  /// game has already ended. Otherwise returns [GuessAccepted] with a new
-  /// session whose history includes the scored guess, and whose status
-  /// becomes [GameStatus.won] if the guess scored all bulls, or
-  /// [GameStatus.lost] if it didn't and no attempts remain — a winning
-  /// final guess always wins, never loses.
+  /// blank, the wrong length, contains non-alphabetic characters, is not
+  /// present in [allowedGuesses], or the game has already ended. Otherwise
+  /// returns [GuessAccepted] with a new session whose history includes the
+  /// scored guess, and whose status becomes [GameStatus.won] if the guess
+  /// scored all bulls, or [GameStatus.lost] if it didn't and no attempts
+  /// remain — a winning final guess always wins, never loses.
   GuessSubmission submitGuess({
     required GameSession session,
     required String rawGuess,
+    required Set<String> allowedGuesses,
   }) {
     final validation = validator.validate(
       rawGuess: rawGuess,
       secretWordLength: session.secretWord.length,
       status: session.status,
+      allowedGuesses: allowedGuesses,
     );
     if (validation is InvalidGuess) {
       return GuessRejected(session: session, reason: validation.reason);

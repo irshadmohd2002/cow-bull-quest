@@ -1,6 +1,7 @@
 import 'package:cowbullgame/app.dart';
 import 'package:cowbullgame/app_settings.dart';
 import 'package:cowbullgame/core/privacy_policy.dart' as privacy_policy_config;
+import 'package:cowbullgame/features/game/data/asset_word_repository.dart';
 import 'package:cowbullgame/features/game/data/word_repository.dart';
 import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,13 @@ class _FakeWordRepository implements WordRepository {
   final List<int> requestedLengths = [];
   final List<GameDifficulty> requestedDifficulties = [];
 
+  /// Words [loadAllowedWords] returns, keyed by word length. Seeded with
+  /// every real guess literal this file submits through the UI (only
+  /// `lace`), so tests don't need to register anything themselves.
+  final Map<int, Set<String>> allowedWordsByLength = {
+    4: {'lace'},
+  };
+
   @override
   Future<String> selectSecretWord(
     int wordLength,
@@ -33,7 +41,8 @@ class _FakeWordRepository implements WordRepository {
   }
 
   @override
-  Future<List<String>> loadAllowedWords(int wordLength) async => const [];
+  Future<List<String>> loadAllowedWords(int wordLength) async =>
+      List.unmodifiable(allowedWordsByLength[wordLength] ?? const <String>{});
 
   @override
   Future<List<String>> loadSecretWords(
@@ -68,6 +77,15 @@ Future<void> _backgroundAndResume(WidgetTester tester) async {
 }
 
 void main() {
+  group('CowBullApp word repository composition', () {
+    test('defaults to AssetWordRepository — the release build source of both '
+        'secret words and the allowed-guess dictionary — when none is '
+        'injected', () {
+      final app = CowBullApp();
+      expect(app.wordRepository, isA<AssetWordRepository>());
+    });
+  });
+
   testWidgets('the app starts on the home screen', (tester) async {
     await tester.pumpWidget(CowBullApp(wordRepository: _FakeWordRepository()));
     await tester.pumpAndSettle();
