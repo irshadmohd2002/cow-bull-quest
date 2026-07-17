@@ -58,13 +58,25 @@ String _difficultyLabel(GameDifficulty difficulty) => switch (difficulty) {
 /// disposed controller can ever be reused and no controller outlives its
 /// game flow.
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, required this.controller, required this.config});
+  const GameScreen({
+    super.key,
+    required this.controller,
+    required this.config,
+    this.onButtonTap,
+  });
 
   /// The controller for this game flow. Owned by this screen.
   final GameController controller;
 
   /// The configuration this screen was started (and is restarted) with.
   final GameConfig config;
+
+  /// Called for this screen's own important navigation actions (Restart,
+  /// Return Home) so the caller can play a button-activation sound, or
+  /// `null` to play none. Deliberately generic — this screen never imports
+  /// anything audio/haptic-related itself; the app-level composition root
+  /// supplies the real behavior (see `app.dart`).
+  final VoidCallback? onButtonTap;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -103,11 +115,15 @@ class _GameScreenState extends State<GameScreen> {
     super.dispose();
   }
 
-  void _handleReturnHome() => Navigator.of(context).pop();
+  void _handleReturnHome() {
+    widget.onButtonTap?.call();
+    Navigator.of(context).pop();
+  }
 
   void _handleRetry() => unawaited(widget.controller.startGame(widget.config));
 
   void _handleRestart() {
+    widget.onButtonTap?.call();
     _guessTextController.clear();
     unawaited(widget.controller.restart());
   }

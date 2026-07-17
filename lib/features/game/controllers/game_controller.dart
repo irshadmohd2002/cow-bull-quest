@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../coin_wallet.dart';
+import '../../../core/feedback/game_feedback.dart';
 import '../data/word_repository.dart';
 import '../models/game_config.dart';
 import '../models/game_session.dart';
@@ -32,6 +33,7 @@ class GameController extends ChangeNotifier {
     HintPolicy hintPolicy = const HintPolicy(),
     CompletionIdGenerator completionIdGenerator =
         const SecureRandomCompletionIdGenerator(),
+    GameFeedback feedback = const NoOpGameFeedback(),
     void Function(String completionId, GameSession session)? onGameCompleted,
   }) : _wordRepository = wordRepository, // ignore: prefer_initializing_formals
        _gameEngine = gameEngine, // ignore: prefer_initializing_formals
@@ -41,12 +43,21 @@ class GameController extends ChangeNotifier {
        _hintPolicy = hintPolicy, // ignore: prefer_initializing_formals
        // ignore: prefer_initializing_formals
        _completionIdGenerator = completionIdGenerator,
+       _feedback = feedback, // ignore: prefer_initializing_formals
        // ignore: prefer_initializing_formals
        _onGameCompleted = onGameCompleted;
 
   final WordRepository _wordRepository;
   final GameEngine _gameEngine;
   final CompletionIdGenerator _completionIdGenerator;
+
+  /// Reports every explicit gameplay outcome (accepted/rejected guesses,
+  /// revealed hints, win/loss) exactly once, at the moment this controller
+  /// itself recognizes each transition. Defaults to [NoOpGameFeedback] so
+  /// existing callers/tests that don't care about audio/haptic feedback are
+  /// unaffected. The real, shipped app always injects the app-wide
+  /// `AudioFeedbackCoordinator` (see `app.dart`).
+  final GameFeedback _feedback;
 
   /// The coin wallet hint purchases spend from. Defaults to a fresh,
   /// non-persistent, 100-coin [CoinWallet] when not injected — the same
@@ -253,6 +264,7 @@ class GameController extends ChangeNotifier {
       case GuessAccepted():
         final updated = submission.session;
         if (updated.status == GameStatus.inProgress) {
+          _feedback.onValidGuess();
           _setState(
             GameActive(
               view: GameSessionView.fromSession(updated),
@@ -261,12 +273,18 @@ class GameController extends ChangeNotifier {
           );
         } else {
           _setState(GameCompleted(updated));
+          if (updated.status == GameStatus.won) {
+            _feedback.onGameWon();
+          } else {
+            _feedback.onGameLost();
+          }
           final completionId = _activeCompletionId;
           if (completionId != null) {
             _onGameCompleted?.call(completionId, updated);
           }
         }
       case GuessRejected():
+        _feedback.onInvalidGuess();
         _setState(
           GameActive(
             view: GameSessionView.fromSession(submission.session),
@@ -369,6 +387,7 @@ class GameController extends ChangeNotifier {
         hintState: _hintState,
       ),
     );
+    _feedback.onHintRevealed(paid: cost > 0);
     return HintRevealed(hint: computation.hint, coinsSpent: cost);
   }
 

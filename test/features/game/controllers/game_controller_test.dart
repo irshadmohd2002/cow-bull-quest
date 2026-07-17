@@ -14,6 +14,7 @@ import 'package:cowbullgame/features/game/services/guess_validator.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_completion_id_generator.dart';
+import '../../../support/fake_game_feedback.dart';
 
 /// A minimal [WordRepository] fake: [selectSecretWord] resolves from
 /// [wordsByLengthAndDifficulty] by default, throws [errorToThrow] if set,
@@ -1783,6 +1784,261 @@ void main() {
       controller.dispose();
 
       expect(wallet.spend(10), isFalse);
+    });
+  });
+
+  group('GameController GameFeedback events', () {
+    test(
+      'an accepted, still-in-progress guess reports onValidGuess once',
+      (() async {
+        final repo = _FakeWordRepository()
+          ..registerWordForAllDifficulties(4, 'lace');
+        final feedback = FakeGameFeedback();
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+          feedback: feedback,
+        );
+        await controller.startGame(config4);
+
+        controller.submitGuess('race');
+
+        expect(feedback.calls, ['onValidGuess']);
+      }),
+    );
+
+    test('a rejected guess reports onInvalidGuess once', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final feedback = FakeGameFeedback();
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        feedback: feedback,
+      );
+      await controller.startGame(config4);
+
+      controller.submitGuess('qzxj');
+
+      expect(feedback.calls, ['onInvalidGuess']);
+    });
+
+    test('a rejected guess does not consume an attempt', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final feedback = FakeGameFeedback();
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        feedback: feedback,
+      );
+      await controller.startGame(config4);
+
+      controller.submitGuess('qzxj');
+
+      final active = controller.state as GameActive;
+      expect(active.view.attemptsUsed, 0);
+    });
+
+    test('a winning guess reports onGameWon exactly once, with no '
+        'onValidGuess call', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final feedback = FakeGameFeedback();
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        feedback: feedback,
+      );
+      await controller.startGame(config4);
+
+      controller.submitGuess('lace');
+
+      expect(feedback.calls, ['onGameWon']);
+    });
+
+    test('a losing final guess reports onGameLost exactly once', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final feedback = FakeGameFeedback();
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        feedback: feedback,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.easy),
+      );
+      // maxAttempts for Easy/4-letter is 10; exhaust every attempt with a
+      // guess that is valid but never wins.
+      for (var i = 0; i < 9; i++) {
+        controller.submitGuess('race');
+      }
+      feedback.calls.clear();
+
+      controller.submitGuess('race');
+
+      expect(feedback.calls, ['onGameLost']);
+    });
+
+    test('rebuilding/reading the same completed state does not replay '
+        'result feedback', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final feedback = FakeGameFeedback();
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        feedback: feedback,
+      );
+      await controller.startGame(config4);
+      controller.submitGuess('lace');
+      expect(feedback.calls, ['onGameWon']);
+
+      // Reading state repeatedly (as a rebuild would) triggers nothing more.
+      // ignore: unnecessary_statements
+      controller.state;
+      // ignore: unnecessary_statements
+      controller.state;
+      expect(feedback.calls, ['onGameWon']);
+
+      // A further submission against the now-completed game is a no-op.
+      controller.submitGuess('race');
+      expect(feedback.calls, ['onGameWon']);
+    });
+
+    test('restarting permits result feedback again in the new game', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final feedback = FakeGameFeedback();
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        feedback: feedback,
+      );
+      await controller.startGame(config4);
+      controller.submitGuess('lace');
+      expect(feedback.calls, ['onGameWon']);
+
+      await controller.restart();
+      controller.submitGuess('lace');
+
+      expect(feedback.calls, ['onGameWon', 'onGameWon']);
+    });
+
+    test('a free Hard hint reports onHintRevealed(paid: false)', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final feedback = FakeGameFeedback();
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        feedback: feedback,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.hard),
+      );
+
+      controller.useHint();
+
+      expect(feedback.calls, ['onHintRevealed(paid: false)']);
+    });
+
+    test('a paid hint reports onHintRevealed(paid: true) only after the '
+        'coin deduction succeeds', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final feedback = FakeGameFeedback();
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+        feedback: feedback,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.easy),
+      );
+
+      final outcome = controller.useHint();
+
+      expect(outcome, isA<HintRevealed>());
+      expect(wallet.balance, 80);
+      expect(feedback.calls, ['onHintRevealed(paid: true)']);
+    });
+
+    test('an insufficient-balance hint attempt reports no feedback', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final feedback = FakeGameFeedback();
+      final wallet = CoinWallet(initialBalance: 10);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+        feedback: feedback,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.easy),
+      );
+
+      controller.useHint();
+
+      expect(feedback.calls, isEmpty);
+    });
+
+    test('a hint attempt once the limit is reached reports no further '
+        'feedback', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final feedback = FakeGameFeedback();
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        feedback: feedback,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(
+          wordLength: 4,
+          difficulty: GameDifficulty.common,
+        ),
+      );
+
+      controller.useHint();
+      feedback.calls.clear();
+      controller.useHint();
+
+      expect(feedback.calls, isEmpty);
+    });
+
+    test('rapid repeated submissions of the same guess each report their '
+        'own outcome, never duplicated for one submission', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final feedback = FakeGameFeedback();
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        feedback: feedback,
+      );
+      await controller.startGame(config4);
+
+      controller.submitGuess('race');
+      controller.submitGuess('mace');
+
+      expect(feedback.calls, ['onValidGuess', 'onValidGuess']);
+    });
+
+    test('the default feedback is a no-op and never throws', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(config4);
+
+      expect(() => controller.submitGuess('lace'), returnsNormally);
     });
   });
 }

@@ -66,6 +66,7 @@ class HomeScreen extends StatefulWidget {
     required this.onOpenSettings,
     required this.onOpenStatistics,
     required this.coinBalance,
+    this.onDifficultySelected,
   });
 
   /// Called with the chosen difficulty when the player starts a game. Every
@@ -91,6 +92,12 @@ class HomeScreen extends StatefulWidget {
   /// presentational; the app-level composition root owns listening to the
   /// wallet and rebuilding this screen when it changes.
   final int coinBalance;
+
+  /// Called with the newly-chosen difficulty whenever the player picks a
+  /// different segment, or `null` to report nothing. Deliberately generic —
+  /// this screen never imports anything audio/haptic-related itself; the
+  /// app-level composition root supplies the real behavior (see `app.dart`).
+  final ValueChanged<DifficultyOption>? onDifficultySelected;
 
   /// The difficulty preselected when Home first appears. `common` — the
   /// broadest, middle-of-the-road pool — is the least surprising default
@@ -195,9 +202,11 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                           ],
                           selected: {_selectedDifficulty},
-                          onSelectionChanged: (selection) => setState(
-                            () => _selectedDifficulty = selection.first,
-                          ),
+                          onSelectionChanged: (selection) {
+                            final chosen = selection.first;
+                            setState(() => _selectedDifficulty = chosen);
+                            widget.onDifficultySelected?.call(chosen);
+                          },
                         ),
                       ),
                       const SizedBox(height: AppSpacing.md),

@@ -3,18 +3,31 @@ import 'dart:async';
 import 'package:cowbullgame/app_bootstrap.dart';
 import 'package:cowbullgame/app_settings.dart';
 import 'package:cowbullgame/app_startup.dart';
+import 'package:cowbullgame/audio_feedback_coordinator.dart';
+import 'package:cowbullgame/audio_feedback_settings.dart';
 import 'package:cowbullgame/coin_wallet.dart';
 import 'package:cowbullgame/core/persistence/storage_keys.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/fake_audio_service.dart';
+import 'support/fake_haptic_service.dart';
 import 'support/fake_preferences_store.dart';
 import 'support/fake_statistics_repository.dart';
 
-Future<AppBootstrap> _succeedingLoader() async => AppBootstrap(
-  settings: AppSettings(),
-  statisticsRepository: FakeStatisticsRepository(),
-  coinWallet: CoinWallet(),
-);
+Future<AppBootstrap> _succeedingLoader() async {
+  final audioFeedbackSettings = AudioFeedbackSettings();
+  return AppBootstrap(
+    settings: AppSettings(),
+    statisticsRepository: FakeStatisticsRepository(),
+    coinWallet: CoinWallet(),
+    audioFeedbackSettings: audioFeedbackSettings,
+    audioFeedback: AudioFeedbackCoordinator(
+      audioService: FakeAudioService(),
+      hapticService: FakeHapticService(),
+      settings: audioFeedbackSettings,
+    ),
+  );
+}
 
 void main() {
   testWidgets('a successful startup shows Home', (tester) async {

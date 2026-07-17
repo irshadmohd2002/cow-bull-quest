@@ -12,4 +12,16 @@ abstract final class StorageKeys {
 
   /// The persisted coin balance string value (see `coin_wallet.dart`).
   static const String coinBalance = 'coin_balance';
+
+  /// The persisted sound-effects-enabled `'true'`/`'false'` value (see
+  /// `audio_feedback_settings.dart`).
+  static const String soundEffectsEnabled = 'sound_effects_enabled';
+
+  /// The persisted background-music-enabled `'true'`/`'false'` value (see
+  /// `audio_feedback_settings.dart`).
+  static const String musicEnabled = 'music_enabled';
+
+  /// The persisted haptic-feedback-enabled `'true'`/`'false'` value (see
+  /// `audio_feedback_settings.dart`).
+  static const String hapticsEnabled = 'haptics_enabled';
 }

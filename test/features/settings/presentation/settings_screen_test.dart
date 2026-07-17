@@ -8,12 +8,24 @@ void main() {
     AppThemePreference themePreference = AppThemePreference.system,
     ValueChanged<AppThemePreference>? onThemePreferenceChanged,
     VoidCallback? onOpenPrivacyPolicy,
+    bool soundEffectsEnabled = true,
+    ValueChanged<bool>? onSoundEffectsChanged,
+    bool musicEnabled = false,
+    ValueChanged<bool>? onMusicChanged,
+    bool hapticsEnabled = true,
+    ValueChanged<bool>? onHapticsChanged,
   }) {
     return MaterialApp(
       home: SettingsScreen(
         themePreference: themePreference,
         onThemePreferenceChanged: onThemePreferenceChanged ?? (_) {},
         onOpenPrivacyPolicy: onOpenPrivacyPolicy,
+        soundEffectsEnabled: soundEffectsEnabled,
+        onSoundEffectsChanged: onSoundEffectsChanged ?? (_) {},
+        musicEnabled: musicEnabled,
+        onMusicChanged: onMusicChanged ?? (_) {},
+        hapticsEnabled: hapticsEnabled,
+        onHapticsChanged: onHapticsChanged ?? (_) {},
       ),
     );
   }
@@ -170,6 +182,7 @@ void main() {
         buildSubject(onOpenPrivacyPolicy: () => callCount++),
       );
 
+      await tester.ensureVisible(find.text('Privacy Policy'));
       await tester.tap(find.text('Privacy Policy'));
       await tester.pumpAndSettle();
 
@@ -226,6 +239,190 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('Privacy Policy'), findsOneWidget);
+    });
+  });
+
+  group('Audio & Feedback section', () {
+    testWidgets('shows all three controls', (tester) async {
+      await tester.pumpWidget(buildSubject());
+
+      expect(
+        find.widgetWithText(SwitchListTile, 'Sound effects'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(SwitchListTile, 'Background music'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(SwitchListTile, 'Haptic feedback'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('shows each control\'s description', (tester) async {
+      await tester.pumpWidget(buildSubject());
+
+      expect(
+        find.text('Plays interface and gameplay sound effects.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Plays subtle music while using the app.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Uses light vibration feedback for important actions.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('reflects the default switch states (sound on, music off, '
+        'haptics on)', (tester) async {
+      await tester.pumpWidget(
+        buildSubject(
+          soundEffectsEnabled: true,
+          musicEnabled: false,
+          hapticsEnabled: true,
+        ),
+      );
+
+      final tiles = tester
+          .widgetList<SwitchListTile>(find.byType(SwitchListTile))
+          .toList();
+      expect(tiles[0].value, isTrue); // Sound effects
+      expect(tiles[1].value, isFalse); // Background music
+      expect(tiles[2].value, isTrue); // Haptic feedback
+    });
+
+    testWidgets('toggling sound effects invokes only its own callback', (
+      tester,
+    ) async {
+      bool? soundEffectsValue;
+      var musicCallbackCount = 0;
+      var hapticsCallbackCount = 0;
+      await tester.pumpWidget(
+        buildSubject(
+          onSoundEffectsChanged: (value) => soundEffectsValue = value,
+          onMusicChanged: (_) => musicCallbackCount++,
+          onHapticsChanged: (_) => hapticsCallbackCount++,
+        ),
+      );
+
+      await tester.ensureVisible(
+        find.widgetWithText(SwitchListTile, 'Sound effects'),
+      );
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Sound effects'));
+      await tester.pumpAndSettle();
+
+      expect(soundEffectsValue, isFalse);
+      expect(musicCallbackCount, 0);
+      expect(hapticsCallbackCount, 0);
+    });
+
+    testWidgets('toggling background music invokes only its own callback', (
+      tester,
+    ) async {
+      bool? musicValue;
+      var soundEffectsCallbackCount = 0;
+      var hapticsCallbackCount = 0;
+      await tester.pumpWidget(
+        buildSubject(
+          onSoundEffectsChanged: (_) => soundEffectsCallbackCount++,
+          onMusicChanged: (value) => musicValue = value,
+          onHapticsChanged: (_) => hapticsCallbackCount++,
+        ),
+      );
+
+      await tester.ensureVisible(
+        find.widgetWithText(SwitchListTile, 'Background music'),
+      );
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Background music'));
+      await tester.pumpAndSettle();
+
+      expect(musicValue, isTrue);
+      expect(soundEffectsCallbackCount, 0);
+      expect(hapticsCallbackCount, 0);
+    });
+
+    testWidgets('toggling haptic feedback invokes only its own callback', (
+      tester,
+    ) async {
+      bool? hapticsValue;
+      var soundEffectsCallbackCount = 0;
+      var musicCallbackCount = 0;
+      await tester.pumpWidget(
+        buildSubject(
+          onSoundEffectsChanged: (_) => soundEffectsCallbackCount++,
+          onMusicChanged: (_) => musicCallbackCount++,
+          onHapticsChanged: (value) => hapticsValue = value,
+        ),
+      );
+
+      await tester.ensureVisible(
+        find.widgetWithText(SwitchListTile, 'Haptic feedback'),
+      );
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Haptic feedback'));
+      await tester.pumpAndSettle();
+
+      expect(hapticsValue, isFalse);
+      expect(soundEffectsCallbackCount, 0);
+      expect(musicCallbackCount, 0);
+    });
+
+    testWidgets('each control has a clear semantics label', (tester) async {
+      await tester.pumpWidget(buildSubject());
+
+      final handle = tester.ensureSemantics();
+      expect(
+        find.bySemanticsLabel(
+          RegExp('Sound effects.*sound effects', dotAll: true),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(RegExp('Background music.*music', dotAll: true)),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(
+          RegExp('Haptic feedback.*vibration', dotAll: true),
+        ),
+        findsOneWidget,
+      );
+      handle.dispose();
+    });
+
+    testWidgets('does not overflow on a narrow screen', (tester) async {
+      tester.view.physicalSize = const Size(320, 480);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(buildSubject());
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.widgetWithText(SwitchListTile, 'Sound effects'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('does not overflow under large text scaling', (tester) async {
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(3.0)),
+          child: buildSubject(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.widgetWithText(SwitchListTile, 'Sound effects'),
+        findsOneWidget,
+      );
     });
   });
 }

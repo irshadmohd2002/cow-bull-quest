@@ -970,6 +970,7 @@ void main() {
       await tester.ensureVisible(find.text('Settings'));
       await tester.tap(find.text('Settings'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Privacy Policy'));
       await tester.tap(find.text('Privacy Policy'));
       await tester.pumpAndSettle();
 
@@ -1023,6 +1024,7 @@ void main() {
           findsOneWidget,
         );
 
+        await tester.ensureVisible(find.text('Privacy Policy'));
         await tester.tap(find.text('Privacy Policy'));
         await tester.pumpAndSettle();
 
@@ -1047,6 +1049,7 @@ void main() {
         await tester.ensureVisible(find.text('Settings'));
         await tester.tap(find.text('Settings'));
         await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Privacy Policy'));
         await tester.tap(find.text('Privacy Policy'));
         // Deliberately not pumpAndSettle: the shown SnackBar auto-dismisses
         // on its own timer, and pumpAndSettle would pump straight through
@@ -1084,6 +1087,7 @@ void main() {
         await tester.ensureVisible(find.text('Settings'));
         await tester.tap(find.text('Settings'));
         await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Privacy Policy'));
         await tester.tap(find.text('Privacy Policy'));
         await tester.pump();
         await tester.pump();

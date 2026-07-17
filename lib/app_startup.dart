@@ -128,8 +128,9 @@ class _AppStartupState extends State<AppStartup> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Reset local data?'),
         content: const Text(
-          'This clears your theme preference, statistics history, and coin '
-          'balance so the app can start fresh. This cannot be undone.',
+          'This clears your theme preference, statistics history, coin '
+          'balance, and audio/haptic feedback preferences so the app can '
+          'start fresh. This cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -170,6 +171,8 @@ class _AppStartupState extends State<AppStartup> {
         settings: bootstrap.settings,
         statisticsRepository: bootstrap.statisticsRepository,
         coinWallet: bootstrap.coinWallet,
+        audioFeedbackSettings: bootstrap.audioFeedbackSettings,
+        audioFeedback: bootstrap.audioFeedback,
       ),
     };
   }

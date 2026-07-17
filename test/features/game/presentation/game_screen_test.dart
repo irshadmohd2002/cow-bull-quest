@@ -60,9 +60,17 @@ void main() {
     difficulty: GameDifficulty.easy,
   );
 
-  Widget buildSubject(GameController controller, GameConfig config) {
+  Widget buildSubject(
+    GameController controller,
+    GameConfig config, {
+    VoidCallback? onButtonTap,
+  }) {
     return MaterialApp(
-      home: GameScreen(controller: controller, config: config),
+      home: GameScreen(
+        controller: controller,
+        config: config,
+        onButtonTap: onButtonTap,
+      ),
     );
   }
 
@@ -390,6 +398,74 @@ void main() {
 
     expect(find.text('Go to game'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('restart invokes onButtonTap', (tester) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    final controller = GameController(wordRepository: repo, gameEngine: engine);
+    var callCount = 0;
+
+    await tester.pumpWidget(
+      buildSubject(controller, config4, onButtonTap: () => callCount++),
+    );
+    await tester.pumpAndSettle();
+    await enterAndSubmit(tester, 'lace');
+
+    await tester.tap(find.text('Restart'));
+    await tester.pumpAndSettle();
+
+    expect(callCount, 1);
+  });
+
+  testWidgets('return home invokes onButtonTap', (tester) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    final controller = GameController(wordRepository: repo, gameEngine: engine);
+    var callCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => GameScreen(
+                      controller: controller,
+                      config: config4,
+                      onButtonTap: () => callCount++,
+                    ),
+                  ),
+                ),
+                child: const Text('Go to game'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Go to game'));
+    await tester.pumpAndSettle();
+    await enterAndSubmit(tester, 'lace');
+    await tester.tap(find.text('Return to Home'));
+    await tester.pumpAndSettle();
+
+    expect(callCount, 1);
+  });
+
+  testWidgets('works normally when onButtonTap is left unset', (tester) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+    final controller = GameController(wordRepository: repo, gameEngine: engine);
+
+    await tester.pumpWidget(buildSubject(controller, config4));
+    await tester.pumpAndSettle();
+    await enterAndSubmit(tester, 'lace');
+
+    await tester.tap(find.text('Restart'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('major controls have semantic labels', (tester) async {

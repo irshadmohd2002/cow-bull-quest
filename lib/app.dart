@@ -4,7 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher_pkg;
 
 import 'app_settings.dart';
+import 'audio_feedback_coordinator.dart';
+import 'audio_feedback_settings.dart';
 import 'coin_wallet.dart';
+import 'core/audio/audioplayers_audio_service.dart';
+import 'core/haptics/platform_haptic_service.dart';
 import 'core/persistence/shared_preferences_store.dart';
 import 'core/privacy_policy.dart' as privacy_policy_config;
 import 'features/game/controllers/game_controller.dart';
@@ -100,6 +104,8 @@ class CowBullApp extends StatefulWidget {
     this.settings,
     StatisticsRepository? statisticsRepository,
     this.coinWallet,
+    this.audioFeedbackSettings,
+    this.audioFeedback,
     String? privacyPolicyUrl,
     UrlLauncher? urlLauncher,
   }) : wordRepository = wordRepository ?? AssetWordRepository(),
@@ -135,6 +141,22 @@ class CowBullApp extends StatefulWidget {
   /// always injects an `AppBootstrap`-loaded wallet, exactly as it does for
   /// [settings].
   final CoinWallet? coinWallet;
+
+  /// An externally-owned sound-effects/music/haptics preferences source, or
+  /// `null` to let this widget create its own **non-persistent, in-memory
+  /// only** fallback — the exact same fallback semantics as [settings] (see
+  /// its doc above). When non-null, the caller retains ownership.
+  final AudioFeedbackSettings? audioFeedbackSettings;
+
+  /// An externally-owned audio/haptic feedback coordinator, or `null` to
+  /// let this widget create its own fallback backed by a real
+  /// [AudioPlayersAudioService]/[PlatformHapticService] pair and whichever
+  /// [audioFeedbackSettings] this widget resolved to. When non-null, the
+  /// caller retains ownership: this widget uses the exact instance given
+  /// but never disposes it. The real, persistent app entry point always
+  /// injects an `AppBootstrap`-loaded coordinator, exactly as it does for
+  /// [settings].
+  final AudioFeedbackCoordinator? audioFeedback;
 
   /// The privacy-policy URL Settings' "Privacy Policy" item opens, or
   /// `null` to use the app's single, centrally-configured
@@ -182,6 +204,29 @@ class _CowBullAppState extends State<CowBullApp> {
   /// instance the caller retains ownership of.
   late final bool _ownsCoinWallet;
 
+  /// The sound-effects/music/haptics preferences instance actually in use.
+  /// Resolved once in [initState], mirroring [_settings]: shared by
+  /// [SettingsScreen]'s three switches and [_audioFeedback], so a toggle
+  /// there and the behavior this state's [_audioFeedback] applies always
+  /// agree.
+  late final AudioFeedbackSettings _audioFeedbackSettings;
+
+  /// Whether this state created [_audioFeedbackSettings] itself and
+  /// therefore must dispose it. `false` when it is an externally-injected
+  /// instance the caller retains ownership of.
+  late final bool _ownsAudioFeedbackSettings;
+
+  /// The audio/haptic feedback coordinator actually in use. Resolved once
+  /// in [initState]: injected into every [GameController] this state
+  /// creates, and called directly for this composition root's own
+  /// UI-triggered feedback (button taps, difficulty selection).
+  late final AudioFeedbackCoordinator _audioFeedback;
+
+  /// Whether this state created [_audioFeedback] itself and therefore must
+  /// dispose it. `false` when [_audioFeedback] is an externally-injected
+  /// instance the caller retains ownership of.
+  late final bool _ownsAudioFeedback;
+
   /// The single [StatisticsController] for the app's lifetime, wrapping
   /// [CowBullApp.statisticsRepository]. Always created and disposed by this
   /// state — unlike [_settings], there is no externally-injected seam for
@@ -208,6 +253,26 @@ class _CowBullAppState extends State<CowBullApp> {
       _coinWallet = CoinWallet();
       _ownsCoinWallet = true;
     }
+    final injectedAudioSettings = widget.audioFeedbackSettings;
+    if (injectedAudioSettings != null) {
+      _audioFeedbackSettings = injectedAudioSettings;
+      _ownsAudioFeedbackSettings = false;
+    } else {
+      _audioFeedbackSettings = AudioFeedbackSettings();
+      _ownsAudioFeedbackSettings = true;
+    }
+    final injectedAudioFeedback = widget.audioFeedback;
+    if (injectedAudioFeedback != null) {
+      _audioFeedback = injectedAudioFeedback;
+      _ownsAudioFeedback = false;
+    } else {
+      _audioFeedback = AudioFeedbackCoordinator(
+        audioService: AudioPlayersAudioService(),
+        hapticService: const PlatformHapticService(),
+        settings: _audioFeedbackSettings,
+      );
+      _ownsAudioFeedback = true;
+    }
     _statisticsController = StatisticsController(
       repository: widget.statisticsRepository,
     );
@@ -217,6 +282,8 @@ class _CowBullAppState extends State<CowBullApp> {
   void dispose() {
     if (_ownsSettings) _settings.dispose();
     if (_ownsCoinWallet) _coinWallet.dispose();
+    if (_ownsAudioFeedback) _audioFeedback.dispose();
+    if (_ownsAudioFeedbackSettings) _audioFeedbackSettings.dispose();
     _statisticsController.dispose();
     super.dispose();
   }
@@ -241,6 +308,7 @@ class _CowBullAppState extends State<CowBullApp> {
   /// feature-neutral [DifficultyOption] statistics needs, so no separate
   /// `GameDifficulty`-to-neutral mapping is needed at completion time.
   void _startGame(BuildContext context, DifficultyOption difficulty) {
+    _audioFeedback.playButtonTap();
     final config = GameConfig.forSelection(
       wordLength: GameConfig.visibleWordLength,
       difficulty: _toGameDifficulty(difficulty),
@@ -254,6 +322,7 @@ class _CowBullAppState extends State<CowBullApp> {
             wordRepository: widget.wordRepository,
             gameEngine: _gameEngine,
             coinWallet: _coinWallet,
+            feedback: _audioFeedback,
             onGameCompleted: (completionId, session) => _recordCompletedGame(
               id: completionId,
               config: config,
@@ -261,6 +330,7 @@ class _CowBullAppState extends State<CowBullApp> {
               session: session,
             ),
           ),
+          onButtonTap: _audioFeedback.playButtonTap,
         ),
       ),
     );
@@ -320,15 +390,17 @@ class _CowBullAppState extends State<CowBullApp> {
   }
 
   void _openRules(BuildContext context) {
+    _audioFeedback.playButtonTap();
     unawaited(_pushOnce(context, (_) => const RulesScreen()));
   }
 
   void _openSettings(BuildContext context) {
+    _audioFeedback.playButtonTap();
     unawaited(
       _pushOnce(
         context,
         (_) => ListenableBuilder(
-          listenable: _settings,
+          listenable: Listenable.merge([_settings, _audioFeedbackSettings]),
           builder: (context, _) => SettingsScreen(
             themePreference: _settings.themePreference,
             onThemePreferenceChanged: _settings.setThemePreference,
@@ -338,6 +410,13 @@ class _CowBullAppState extends State<CowBullApp> {
                 )
                 ? () => _openPrivacyPolicy(context)
                 : null,
+            soundEffectsEnabled: _audioFeedbackSettings.soundEffectsEnabled,
+            onSoundEffectsChanged:
+                _audioFeedbackSettings.setSoundEffectsEnabled,
+            musicEnabled: _audioFeedbackSettings.musicEnabled,
+            onMusicChanged: _audioFeedbackSettings.setMusicEnabled,
+            hapticsEnabled: _audioFeedbackSettings.hapticsEnabled,
+            onHapticsChanged: _audioFeedbackSettings.setHapticsEnabled,
           ),
         ),
       ),
@@ -383,6 +462,7 @@ class _CowBullAppState extends State<CowBullApp> {
   /// session, the controller is already [StatisticsReady] with fresh data,
   /// so no reload is needed here.
   void _openStatistics(BuildContext context) {
+    _audioFeedback.playButtonTap();
     if (_statisticsController.state is! StatisticsReady) {
       unawaited(_statisticsController.load());
     }
@@ -418,6 +498,8 @@ class _CowBullAppState extends State<CowBullApp> {
               onOpenSettings: () => _openSettings(context),
               onOpenStatistics: () => _openStatistics(context),
               coinBalance: _coinWallet.balance,
+              onDifficultySelected: (_) =>
+                  _audioFeedback.onDifficultySelected(),
             ),
           ),
         ),

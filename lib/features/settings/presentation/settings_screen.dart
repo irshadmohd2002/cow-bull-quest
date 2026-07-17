@@ -24,6 +24,12 @@ class SettingsScreen extends StatelessWidget {
     required this.themePreference,
     required this.onThemePreferenceChanged,
     required this.onOpenPrivacyPolicy,
+    required this.soundEffectsEnabled,
+    required this.onSoundEffectsChanged,
+    required this.musicEnabled,
+    required this.onMusicChanged,
+    required this.hapticsEnabled,
+    required this.onHapticsChanged,
   });
 
   /// The currently-selected theme preference.
@@ -32,6 +38,25 @@ class SettingsScreen extends StatelessWidget {
   /// Called with the newly-selected preference whenever the player picks a
   /// different option.
   final ValueChanged<AppThemePreference> onThemePreferenceChanged;
+
+  /// Whether interface/gameplay sound effects are currently enabled.
+  final bool soundEffectsEnabled;
+
+  /// Called with the new value whenever the player toggles sound effects.
+  final ValueChanged<bool> onSoundEffectsChanged;
+
+  /// Whether the background-music loop is currently enabled.
+  final bool musicEnabled;
+
+  /// Called with the new value whenever the player toggles background
+  /// music.
+  final ValueChanged<bool> onMusicChanged;
+
+  /// Whether haptic feedback is currently enabled.
+  final bool hapticsEnabled;
+
+  /// Called with the new value whenever the player toggles haptic feedback.
+  final ValueChanged<bool> onHapticsChanged;
 
   /// Called when the player taps "Privacy Policy", or `null` to render that
   /// row disabled.
@@ -123,6 +148,71 @@ class SettingsScreen extends StatelessWidget {
                           value: preference,
                           selected: preference == themePreference,
                         ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Semantics(
+                  header: true,
+                  child: Text('Audio & Feedback', style: textTheme.titleMedium),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Control sound, music, and vibration feedback.',
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      SwitchListTile(
+                        secondary: Icon(
+                          soundEffectsEnabled
+                              ? Icons.volume_up
+                              : Icons.volume_off,
+                          color: soundEffectsEnabled
+                              ? colorScheme.primary
+                              : colorScheme.onSurfaceVariant,
+                        ),
+                        title: const Text('Sound effects'),
+                        subtitle: const Text(
+                          'Plays interface and gameplay sound effects.',
+                        ),
+                        value: soundEffectsEnabled,
+                        onChanged: onSoundEffectsChanged,
+                      ),
+                      SwitchListTile(
+                        secondary: Icon(
+                          Icons.music_note,
+                          color: musicEnabled
+                              ? colorScheme.primary
+                              : colorScheme.onSurfaceVariant,
+                        ),
+                        title: const Text('Background music'),
+                        subtitle: const Text(
+                          'Plays subtle music while using the app.',
+                        ),
+                        value: musicEnabled,
+                        onChanged: onMusicChanged,
+                      ),
+                      SwitchListTile(
+                        secondary: Icon(
+                          Icons.vibration,
+                          color: hapticsEnabled
+                              ? colorScheme.primary
+                              : colorScheme.onSurfaceVariant,
+                        ),
+                        title: const Text('Haptic feedback'),
+                        subtitle: const Text(
+                          'Uses light vibration feedback for important '
+                          'actions.',
+                        ),
+                        value: hapticsEnabled,
+                        onChanged: onHapticsChanged,
+                      ),
                     ],
                   ),
                 ),

@@ -10,6 +10,7 @@ void main() {
     VoidCallback? onOpenSettings,
     VoidCallback? onOpenStatistics,
     int coinBalance = 100,
+    ValueChanged<DifficultyOption>? onDifficultySelected,
   }) {
     return MaterialApp(
       home: HomeScreen(
@@ -18,6 +19,7 @@ void main() {
         onOpenSettings: onOpenSettings ?? () {},
         onOpenStatistics: onOpenStatistics ?? () {},
         coinBalance: coinBalance,
+        onDifficultySelected: onDifficultySelected,
       ),
     );
   }
@@ -454,6 +456,41 @@ void main() {
     testWidgets('has an accessible label', (tester) async {
       await tester.pumpWidget(buildSubject((_) {}, coinBalance: 100));
       expect(find.bySemanticsLabel('100 coins'), findsOneWidget);
+    });
+  });
+
+  group('Milestone 16: onDifficultySelected', () {
+    testWidgets('is invoked with the newly-chosen difficulty', (tester) async {
+      DifficultyOption? selected;
+      await tester.pumpWidget(
+        buildSubject(
+          (_) {},
+          onDifficultySelected: (option) => selected = option,
+        ),
+      );
+
+      await tester.tap(find.text('Hard'));
+      await tester.pumpAndSettle();
+
+      expect(selected, DifficultyOption.hard);
+    });
+
+    testWidgets('is not invoked just from building the screen', (tester) async {
+      var callCount = 0;
+      await tester.pumpWidget(
+        buildSubject((_) {}, onDifficultySelected: (_) => callCount++),
+      );
+
+      expect(callCount, 0);
+    });
+
+    testWidgets('works normally when left unset', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}));
+
+      await tester.tap(find.text('Easy'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
     });
   });
 }
