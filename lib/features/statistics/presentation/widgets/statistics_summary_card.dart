@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../theme/app_spacing.dart';
+import '../../../../theme/app_status_colors.dart';
 import '../../models/statistics_snapshot.dart';
 
 /// One label/value row within [StatisticsSummaryCard].
@@ -67,6 +68,12 @@ class StatisticsSummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final averageAttempts = snapshot.averageAttemptsOnWins;
     final colorScheme = Theme.of(context).colorScheme;
+    // The brand's gold accent, reserved for premium/reward moments — the
+    // win rate is the one summary figure that earns it. Falls back to
+    // primary only if the extension is somehow missing from the theme.
+    final winRateAccent =
+        Theme.of(context).extension<AppStatusColors>()?.success ??
+        colorScheme.primary;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
@@ -86,7 +93,7 @@ class StatisticsSummaryCard extends StatelessWidget {
             _SummaryRow(
               label: 'Win rate',
               value: '${(snapshot.winRate * 100).round()}%',
-              accent: colorScheme.primary,
+              accent: winRateAccent,
             ),
             _SummaryRow(
               label: 'Current streak',

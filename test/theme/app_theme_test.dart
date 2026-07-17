@@ -140,6 +140,29 @@ void main() {
       }
     });
 
+    test('status bar and Android navigation bar are themed per brightness', () {
+      final darkStyle = AppTheme.dark.appBarTheme.systemOverlayStyle!;
+      final lightStyle = AppTheme.light.appBarTheme.systemOverlayStyle!;
+
+      // Dark theme: light (pale) status/nav bar icons over a transparent
+      // status bar and a nav bar matching the dark scaffold background.
+      expect(darkStyle.statusBarIconBrightness, Brightness.light);
+      expect(darkStyle.systemNavigationBarIconBrightness, Brightness.light);
+      expect(
+        darkStyle.systemNavigationBarColor,
+        AppTheme.dark.scaffoldBackgroundColor,
+      );
+
+      // Light theme: dark status/nav bar icons over a nav bar matching the
+      // light scaffold background.
+      expect(lightStyle.statusBarIconBrightness, Brightness.dark);
+      expect(lightStyle.systemNavigationBarIconBrightness, Brightness.dark);
+      expect(
+        lightStyle.systemNavigationBarColor,
+        AppTheme.light.scaffoldBackgroundColor,
+      );
+    });
+
     test('AppBar foreground color meets WCAG contrast against its own '
         'background in both themes', () {
       for (final theme in [AppTheme.light, AppTheme.dark]) {
@@ -190,11 +213,21 @@ void main() {
   });
 
   group('AppTheme brand palette', () {
-    const brandGold = Color(0xFFFFC33D);
-
-    test('primary is the same brand gold in both light and dark theme', () {
-      expect(AppTheme.light.colorScheme.primary, brandGold);
-      expect(AppTheme.dark.colorScheme.primary, brandGold);
+    test('primary is a brand blue in both light and dark theme, distinct '
+        'per theme', () {
+      // Light and dark each use their own tone (per the Milestone 13
+      // palette), so the two are deliberately not equal — but both must be
+      // clearly blue-dominant: the blue channel exceeds red.
+      expect(
+        AppTheme.light.colorScheme.primary,
+        isNot(AppTheme.dark.colorScheme.primary),
+      );
+      for (final theme in [AppTheme.light, AppTheme.dark]) {
+        expect(
+          theme.colorScheme.primary.b,
+          greaterThan(theme.colorScheme.primary.r),
+        );
+      }
     });
 
     test('secondary is a royal blue, distinct from primary', () {
@@ -215,25 +248,35 @@ void main() {
       }
     });
 
-    test('error is distinct in hue from the brand gold primary', () {
+    test('error is distinct in hue from the brand blue primary', () {
       for (final theme in [AppTheme.light, AppTheme.dark]) {
         expect(theme.colorScheme.error, isNot(theme.colorScheme.primary));
-        // Gold is red+green dominant with little blue; the brand error red
-        // has a much lower green channel, keeping the two unmistakable.
+        // The brand error red is red-dominant; the brand blue primary is
+        // blue-dominant — keeping the two unmistakable.
         expect(
-          theme.colorScheme.error.g,
-          lessThan(theme.colorScheme.primary.g),
+          theme.colorScheme.error.r,
+          greaterThan(theme.colorScheme.error.b),
+        );
+        expect(
+          theme.colorScheme.primary.b,
+          greaterThan(theme.colorScheme.primary.r),
         );
       }
     });
 
-    test('AppStatusColors.success is registered on both themes and distinct '
-        'from error and primary', () {
+    test('AppStatusColors.success is registered on both themes, is a gold '
+        'distinct from error and primary, and is never used as body text', () {
       for (final theme in [AppTheme.light, AppTheme.dark]) {
         final status = theme.extension<AppStatusColors>();
         expect(status, isNotNull);
         expect(status!.success, isNot(theme.colorScheme.error));
         expect(status.success, isNot(theme.colorScheme.primary));
+        // Gold is red+green dominant with little blue.
+        expect(status.success.r, greaterThan(status.success.b));
+        expect(status.success.g, greaterThan(status.success.b));
+        // The gold "success" accent is reserved for premium/reward
+        // moments (win state, win-rate figure) — never plain body text.
+        expect(theme.colorScheme.onSurface, isNot(status.success));
       }
     });
 
@@ -264,14 +307,6 @@ void main() {
           );
         }
       }
-    });
-
-    test('gold primary is never paired as onSurface body text on a light '
-        'surface', () {
-      // The light theme's onSurface (body text color) must not be the
-      // brand gold - gold is reserved for primary-action fills, never
-      // plain text on a light background.
-      expect(AppTheme.light.colorScheme.onSurface, isNot(brandGold));
     });
 
     testWidgets('themed Card, Chip, buttons, and InputDecoration build '

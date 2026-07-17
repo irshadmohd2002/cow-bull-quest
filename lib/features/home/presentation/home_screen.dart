@@ -348,7 +348,7 @@ class _SegmentLabel extends StatelessWidget {
 class _HomeHeroCard extends StatelessWidget {
   const _HomeHeroCard();
 
-  static const Color _heroForeground = Color(0xFFF8F4E8);
+  static const Color _heroForeground = Color(0xFFF5F7FB);
 
   @override
   Widget build(BuildContext context) {
@@ -367,8 +367,8 @@ class _HomeHeroCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: isDark
-              ? const [Color(0xFF0B1026), Color(0xFF153B8C)]
-              : const [Color(0xFF153B8C), Color(0xFF2560C7)],
+              ? const [Color(0xFF071525), Color(0xFF2457D6)]
+              : const [Color(0xFF244FB5), Color(0xFF195FC8)],
         ),
         borderRadius: BorderRadius.circular(16),
       ),

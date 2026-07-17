@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 /// [ColorScheme] (which has `error` but no `success`).
 ///
 /// Registered on both [ThemeData.extensions] in [AppTheme] and read via
-/// `Theme.of(context).extension<AppStatusColors>()!`. Kept to exactly the
-/// two roles actually consumed (the Game screen's win state) rather than a
-/// speculative broader token set.
+/// `Theme.of(context).extension<AppStatusColors>()!`. [success] is the
+/// brand's gold accent — used sparingly, only for premium/reward moments
+/// (the Game screen's win outcome, the Statistics win-rate figure), never a
+/// button or label color. Kept to exactly the two roles actually consumed
+/// rather than a speculative broader token set.
 @immutable
 class AppStatusColors extends ThemeExtension<AppStatusColors> {
   const AppStatusColors({required this.success, required this.onSuccess});

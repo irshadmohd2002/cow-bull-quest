@@ -1,105 +1,145 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_status_colors.dart';
 
 /// The Cow Bull Quest brand `ColorScheme`s and shared Material 3 component
-/// theming, derived from `assets/branding/cow_bull_quest_icon.png`'s deep
-/// navy/royal-blue/gold/cyan palette.
+/// theming: a premium navy/blue/gold/cyan direction, distinct in both Dark
+/// and Light mode from a generic Material app.
+///
+/// Role mapping (identical intent in both themes, different tones):
+/// - `primary` — Primary blue: the app's one primary action color (Start
+///   Game, Restart, focused input border, selected radio/segment).
+/// - `secondary` — Royal blue: a second, distinct blue for secondary
+///   actions/links (outlined/text buttons, Cows feedback, section
+///   headings).
+/// - `tertiary` — Cyan: secondary accents, hints, Bulls feedback, and
+///   active/streak indicators.
+/// - [AppStatusColors.success] — Gold: used sparingly, only for premium/
+///   reward moments (the win outcome, the win-rate statistic) — never a
+///   button or label color.
 ///
 /// Every role pair below (`onX` against `x`, `onSurface` against
-/// `surface`/`background`) has been checked against the WCAG contrast
+/// `surface`/background) has been checked against the WCAG contrast
 /// formula: body-text pairs clear 4.5:1, large-text/icon/UI-outline pairs
-/// clear 3:1. Gold (`primary`) is never used as body text on a light
-/// surface — see [light]'s `onPrimary`. Final hex values are documented in
-/// `docs/play_store/branding_guide.md`.
+/// clear 3:1 (see `test/theme/app_theme_test.dart`). Gold is never paired as
+/// plain body text on either theme's surface — see the `success`-role tests.
 abstract final class AppTheme {
-  // Shared brand hues, identical across both themes.
-  static const Color _gold = Color(0xFFFFC33D);
-  static const Color _royalBlue = Color(0xFF153B8C);
-  static const Color _cyan = Color(0xFF2EC6FF);
+  // Ink colors used only for text/icons drawn *on top of* a saturated brand
+  // fill. Not part of the brand palette itself — chosen purely for
+  // guaranteed contrast: white-ish text on the two blues (both dark/mid
+  // toned), and a near-black ink on the two brighter hues (cyan, gold).
+  static const Color _inkOnBlue = Colors.white;
+  static const Color _inkOnBright = Color(0xFF041016);
 
-  /// The app's light theme.
+  /// The app's light theme — the same brand family as [dark], not a
+  /// generic white Material theme.
   static ThemeData get light {
-    final base = ColorScheme.fromSeed(seedColor: _gold);
+    const background = Color(0xFFEEF4FB);
+    const surface = Color(0xFFF8FBFF);
+    const elevatedSurface = Color(0xFFE6F0FA);
+    const primaryBlue = Color(0xFF195FC8);
+    const royalBlue = Color(0xFF244FB5);
+    const gold = Color(0xFFB98525);
+    const cyan = Color(0xFF138FA0);
+    const primaryText = Color(0xFF081B31);
+    const secondaryText = Color(0xFF49657F);
+    const divider = Color(0xFFC8D7E6);
+
+    final base = ColorScheme.fromSeed(seedColor: primaryBlue);
     final colorScheme = base.copyWith(
-      primary: _gold,
-      onPrimary: const Color(0xFF241900),
-      primaryContainer: const Color(0xFFFFE3A3),
-      onPrimaryContainer: const Color(0xFF241900),
-      secondary: _royalBlue,
-      onSecondary: Colors.white,
-      secondaryContainer: const Color(0xFFD8E2FF),
-      onSecondaryContainer: const Color(0xFF0A1F4D),
-      tertiary: const Color(0xFF0A7EA8),
-      onTertiary: Colors.white,
-      tertiaryContainer: const Color(0xFFCDEFFB),
-      onTertiaryContainer: const Color(0xFF032B38),
+      primary: primaryBlue,
+      onPrimary: _inkOnBlue,
+      primaryContainer: Color.lerp(primaryBlue, surface, 0.7),
+      onPrimaryContainer: primaryText,
+      secondary: royalBlue,
+      onSecondary: _inkOnBlue,
+      secondaryContainer: Color.lerp(royalBlue, surface, 0.7),
+      onSecondaryContainer: primaryText,
+      tertiary: cyan,
+      onTertiary: _inkOnBright,
+      tertiaryContainer: Color.lerp(cyan, surface, 0.75),
+      onTertiaryContainer: primaryText,
       error: const Color(0xFFC62828),
       onError: Colors.white,
       errorContainer: const Color(0xFFFFDAD6),
       onErrorContainer: const Color(0xFF410002),
-      surface: Colors.white,
-      onSurface: const Color(0xFF14213D),
-      surfaceContainerHighest: const Color(0xFFEEF2FB),
-      onSurfaceVariant: const Color(0xFF5B6B8C),
-      outline: const Color(0xFF7A88A8),
-      outlineVariant: const Color(0xFFD3DAEA),
-      inverseSurface: const Color(0xFF14213D),
-      onInverseSurface: const Color(0xFFF5F1E6),
-      inversePrimary: _gold,
+      surface: surface,
+      onSurface: primaryText,
+      surfaceContainerHighest: elevatedSurface,
+      onSurfaceVariant: secondaryText,
+      outline: secondaryText,
+      outlineVariant: divider,
+      // Mirrors the dark theme's surface/text/primary, so an inverse
+      // element (e.g. a SnackBar) reads as "the other theme" rather than an
+      // arbitrary unrelated color.
+      inverseSurface: const Color(0xFF0D2138),
+      onInverseSurface: const Color(0xFFF5F7FB),
+      inversePrimary: const Color(0xFF1769E0),
     );
     return _themeFor(
       colorScheme,
-      // A cool, pale blue-neutral near-white rather than a warm cream — it
-      // reads as a cleaner, crisper background and pairs better with the
-      // brand's navy/royal-blue/cyan identity than a warm tone does.
-      background: const Color(0xFFF3F6FC),
+      background: background,
       statusColors: const AppStatusColors(
-        success: Color(0xFF1E7A46),
-        onSuccess: Colors.white,
+        success: gold,
+        onSuccess: _inkOnBright,
       ),
     );
   }
 
-  /// The app's dark theme — the palette most faithful to the approved icon.
+  /// The app's dark theme — Dark mode is the default for first-time
+  /// installs (see `AppSettings`), so this is the palette most players see
+  /// first.
   static ThemeData get dark {
+    const background = Color(0xFF071525);
+    const surface = Color(0xFF0D2138);
+    const elevatedSurface = Color(0xFF12304D);
+    const primaryBlue = Color(0xFF1769E0);
+    const royalBlue = Color(0xFF2457D6);
+    const gold = Color(0xFFD6A84B);
+    const cyan = Color(0xFF28C7D9);
+    const primaryText = Color(0xFFF5F7FB);
+    const secondaryText = Color(0xFFAFC2D8);
+    const divider = Color(0xFF24405F);
+
     final base = ColorScheme.fromSeed(
-      seedColor: _gold,
+      seedColor: primaryBlue,
       brightness: Brightness.dark,
     );
     final colorScheme = base.copyWith(
-      primary: _gold,
-      onPrimary: const Color(0xFF0B1026),
-      primaryContainer: const Color(0xFF7A5900),
-      onPrimaryContainer: const Color(0xFFFFE3A3),
-      secondary: const Color(0xFF2F5FC4),
-      onSecondary: const Color(0xFFF5F1E6),
-      secondaryContainer: const Color(0xFF1A2650),
-      onSecondaryContainer: const Color(0xFFD8E2FF),
-      tertiary: _cyan,
-      onTertiary: const Color(0xFF072033),
-      tertiaryContainer: const Color(0xFF0B3B52),
-      onTertiaryContainer: const Color(0xFFCDEFFB),
+      primary: primaryBlue,
+      onPrimary: _inkOnBlue,
+      primaryContainer: Color.lerp(primaryBlue, surface, 0.7),
+      onPrimaryContainer: primaryText,
+      secondary: royalBlue,
+      onSecondary: _inkOnBlue,
+      secondaryContainer: Color.lerp(royalBlue, surface, 0.7),
+      onSecondaryContainer: primaryText,
+      tertiary: cyan,
+      onTertiary: _inkOnBright,
+      tertiaryContainer: Color.lerp(cyan, surface, 0.75),
+      onTertiaryContainer: primaryText,
       error: const Color(0xFFFF6B6B),
       onError: const Color(0xFF1A0000),
       errorContainer: const Color(0xFF5C1414),
       onErrorContainer: const Color(0xFFFFDAD6),
-      surface: const Color(0xFF121A33),
-      onSurface: const Color(0xFFF5F1E6),
-      surfaceContainerHighest: const Color(0xFF1A2650),
-      onSurfaceVariant: const Color(0xFFA9B7D6),
-      outline: const Color(0xFF6B7AA0),
-      outlineVariant: const Color(0xFF2A3660),
-      inverseSurface: const Color(0xFFF5F1E6),
-      onInverseSurface: const Color(0xFF14213D),
-      inversePrimary: const Color(0xFF7A5900),
+      surface: surface,
+      onSurface: primaryText,
+      surfaceContainerHighest: elevatedSurface,
+      onSurfaceVariant: secondaryText,
+      outline: secondaryText,
+      outlineVariant: divider,
+      // Mirrors the light theme's surface/text/primary — see [light].
+      inverseSurface: const Color(0xFFF8FBFF),
+      onInverseSurface: const Color(0xFF081B31),
+      inversePrimary: const Color(0xFF195FC8),
     );
     return _themeFor(
       colorScheme,
-      background: const Color(0xFF0B1026),
+      background: background,
       statusColors: const AppStatusColors(
-        success: Color(0xFF34C77B),
-        onSuccess: Color(0xFF03170C),
+        success: gold,
+        onSuccess: _inkOnBright,
       ),
     );
   }
@@ -114,6 +154,7 @@ abstract final class AppTheme {
     required AppStatusColors statusColors,
   }) {
     final radius = BorderRadius.circular(_cornerRadius);
+    final isDark = colorScheme.brightness == Brightness.dark;
 
     return ThemeData(
       useMaterial3: true,
@@ -123,22 +164,40 @@ abstract final class AppTheme {
       appBarTheme: AppBarTheme(
         // Matches the scaffold background (rather than colorScheme.surface)
         // so the AppBar blends into the screen instead of showing a hard
-        // white/navy edge; elevation/tint are zeroed so scrolling content
-        // can't reintroduce that seam under the AppBar.
+        // edge; elevation/tint are zeroed so scrolling content can't
+        // reintroduce that seam under the AppBar.
         backgroundColor: background,
         foregroundColor: colorScheme.onSurface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
+        // Every screen has an AppBar, so this is the single place that
+        // drives the status bar and Android navigation bar to match the
+        // active theme rather than defaulting to the platform's own style.
+        systemOverlayStyle: isDark
+            ? SystemUiOverlayStyle.light.copyWith(
+                statusBarColor: Colors.transparent,
+                statusBarBrightness: Brightness.dark,
+                systemNavigationBarColor: background,
+                systemNavigationBarIconBrightness: Brightness.light,
+                systemNavigationBarDividerColor: Colors.transparent,
+              )
+            : SystemUiOverlayStyle.dark.copyWith(
+                statusBarColor: Colors.transparent,
+                statusBarBrightness: Brightness.light,
+                systemNavigationBarColor: background,
+                systemNavigationBarIconBrightness: Brightness.dark,
+                systemNavigationBarDividerColor: Colors.transparent,
+              ),
       ),
       cardTheme: CardThemeData(
         // Explicit, rather than left to Material 3's default
         // surfaceContainerLow: that role is never overridden below (only
         // surfaceContainerHighest is, to keep the override list small), so
         // it would otherwise fall back to a tone derived straight from the
-        // gold seed color — a warm, cream-tinted card that clashes with the
-        // brand's cool navy/blue surfaces instead of matching them.
+        // primary seed color instead of the brand's own elevated-surface
+        // tone.
         color: colorScheme.surfaceContainerHighest,
         clipBehavior: Clip.antiAlias,
         elevation: 1,

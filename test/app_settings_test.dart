@@ -58,12 +58,17 @@ void main() {
   });
 
   group('AppSettings.load', () {
-    test('defaults to system when nothing is stored', () async {
+    // The four scenarios Milestone 13 requires: a first-time install (no
+    // saved preference) must default to Dark, while every existing user's
+    // already-saved choice — Light, Dark, or System — is restored verbatim
+    // and never overwritten by that default.
+    test('no saved preference defaults to Dark (first-time install)', () async {
       final settings = await AppSettings.load(FakePreferencesStore());
-      expect(settings.themePreference, AppThemePreference.system);
+      expect(settings.themePreference, AppThemePreference.dark);
+      expect(settings.themeMode, ThemeMode.dark);
     });
 
-    test('restores a persisted light preference', () async {
+    test('a saved Light preference is restored as Light', () async {
       final store = FakePreferencesStore(
         initialValues: {StorageKeys.themePreference: 'light'},
       );
@@ -71,7 +76,7 @@ void main() {
       expect(settings.themePreference, AppThemePreference.light);
     });
 
-    test('restores a persisted dark preference', () async {
+    test('a saved Dark preference is restored as Dark', () async {
       final store = FakePreferencesStore(
         initialValues: {StorageKeys.themePreference: 'dark'},
       );
@@ -79,7 +84,7 @@ void main() {
       expect(settings.themePreference, AppThemePreference.dark);
     });
 
-    test('restores a persisted system preference', () async {
+    test('a saved System preference is restored as System', () async {
       final store = FakePreferencesStore(
         initialValues: {StorageKeys.themePreference: 'system'},
       );
@@ -87,18 +92,26 @@ void main() {
       expect(settings.themePreference, AppThemePreference.system);
     });
 
-    test('falls back to system for an unrecognized persisted value', () async {
+    test('falls back to Dark for an unrecognized persisted value', () async {
       final store = FakePreferencesStore(
         initialValues: {StorageKeys.themePreference: 'sepia'},
       );
       final settings = await AppSettings.load(store);
-      expect(settings.themePreference, AppThemePreference.system);
+      expect(settings.themePreference, AppThemePreference.dark);
     });
 
-    test('falls back to system when reading fails', () async {
+    test('falls back to Dark when reading fails', () async {
       final store = FakePreferencesStore()..failGetString = true;
       final settings = await AppSettings.load(store);
-      expect(settings.themePreference, AppThemePreference.system);
+      expect(settings.themePreference, AppThemePreference.dark);
+    });
+
+    test('loading never writes the Dark default back to storage — an '
+        'unrelated later read still sees nothing saved', () async {
+      final store = FakePreferencesStore();
+      await AppSettings.load(store);
+      expect(store.setStringCalls, isEmpty);
+      expect(store.values.containsKey(StorageKeys.themePreference), isFalse);
     });
   });
 

@@ -15,10 +15,10 @@ void main() {
 
   group('AppBootstrap.load', () {
     test(
-      'defaults to the system theme preference when nothing is stored',
+      'defaults to the Dark theme preference when nothing is stored',
       () async {
         final bootstrap = await AppBootstrap.load();
-        expect(bootstrap.settings.themePreference, AppThemePreference.system);
+        expect(bootstrap.settings.themePreference, AppThemePreference.dark);
       },
     );
 

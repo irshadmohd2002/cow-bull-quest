@@ -33,12 +33,19 @@ enum AppThemePreference {
 
   /// Resolves [value] back to an [AppThemePreference]. Any missing or
   /// unrecognized value — including data from a future app version — falls
-  /// back to [system] rather than throwing, since a corrupted or unknown
+  /// back to [dark] rather than throwing, since a corrupted or unknown
   /// theme preference should never prevent the app from starting.
+  ///
+  /// [dark], not [system], is the fallback: a `null` [value] means no
+  /// preference was ever saved, i.e. a first-time install, and Dark is this
+  /// app's default appearance for first-time users (see [AppSettings.load]).
+  /// An *explicitly* saved `'system'` still resolves to [system] below — this
+  /// fallback only ever fires for the absence of a real, prior choice.
   static AppThemePreference _fromStorageValue(String? value) => switch (value) {
     'light' => AppThemePreference.light,
     'dark' => AppThemePreference.dark,
-    _ => AppThemePreference.system,
+    'system' => AppThemePreference.system,
+    _ => AppThemePreference.dark,
   };
 }
 
@@ -76,9 +83,17 @@ class AppSettings extends ChangeNotifier {
        _store = store; // ignore: prefer_initializing_formals
 
   /// Loads the persisted theme preference from [store] — falling back to
-  /// [AppThemePreference.system] if nothing is stored, the stored value is
+  /// [AppThemePreference.dark] if nothing is stored, the stored value is
   /// unrecognized, or reading fails — and returns an [AppSettings] seeded
   /// with it that persists future changes back to the same [store].
+  ///
+  /// Dark is this app's default appearance for first-time users: a fresh
+  /// install has never written [StorageKeys.themePreference], so [store]
+  /// returns `null` and this resolves to Dark. Critically, this method never
+  /// *writes* that fallback back to [store] — it only decides what to seed
+  /// [AppSettings] with in memory — so an existing user's already-saved
+  /// preference (Light, Dark, or System) is read back verbatim next launch
+  /// and is never silently overwritten by this default.
   ///
   /// Intended to be `await`-ed during app bootstrap, before the first
   /// frame, so the correct theme is known immediately and the UI never
@@ -89,7 +104,7 @@ class AppSettings extends ChangeNotifier {
       final stored = await store.getString(StorageKeys.themePreference);
       initial = AppThemePreference._fromStorageValue(stored);
     } on PreferencesStoreException {
-      initial = AppThemePreference.system;
+      initial = AppThemePreference.dark;
     }
     return AppSettings(initialThemePreference: initial, store: store);
   }
