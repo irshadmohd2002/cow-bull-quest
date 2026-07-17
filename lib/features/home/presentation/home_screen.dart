@@ -5,10 +5,13 @@ import '../../../theme/app_motion.dart';
 import '../../../theme/app_spacing.dart';
 
 /// Concise, human-facing label for [option]. Presentation-layer concern —
-/// [DifficultyOption] itself carries no human-facing text.
+/// [DifficultyOption] itself carries no human-facing text. The internal
+/// [DifficultyOption.common] value keeps its enum name to avoid an
+/// unnecessary migration of stored statistics; only its displayed label
+/// changed from "Common" to "Medium".
 String _difficultyLabel(DifficultyOption option) => switch (option) {
   DifficultyOption.easy => 'Easy',
-  DifficultyOption.common => 'Common',
+  DifficultyOption.common => 'Medium',
   DifficultyOption.hard => 'Hard',
 };
 
@@ -22,19 +25,22 @@ String _difficultyDescription(DifficultyOption option) => switch (option) {
 };
 
 /// The app's entry screen: a brief explanation of the game, a choice of
-/// secret-word length (4, 5, or 6 letters) and difficulty (Easy, Common, or
-/// Hard), and entry points to starting a game, How to Play, and Settings.
+/// difficulty (Easy, Medium, or Hard), and entry points to starting a game,
+/// How to Play, and Settings.
 ///
-/// Purely presentational and feature-local — it owns only the selected word
-/// length (a plain `int`) and difficulty (the shared, feature-neutral
-/// [DifficultyOption]) as local state, and never imports anything from the
-/// `game`, `rules`, or `settings` features (no `GameConfig`, no
-/// `GameDifficulty`, no repository, no engine, no controller, no other
-/// feature's screen). All three actions are handed off entirely to
-/// [onStartGame], [onOpenRules], and [onOpenSettings], which the app-level
-/// composition root supplies; that composition root is the one place that
-/// turns the chosen length and difficulty into a `GameConfig` via
-/// `GameConfig.forSelection` and owns navigation to the other screens.
+/// Every game — regardless of difficulty — always uses a 4-letter secret
+/// word and allows 10 attempts (see Milestone 12); difficulty only changes
+/// which word pool the secret word is drawn from. Purely presentational and
+/// feature-local — it owns only the selected difficulty (the shared,
+/// feature-neutral [DifficultyOption]) as local state, and never imports
+/// anything from the `game`, `rules`, or `settings` features (no
+/// `GameConfig`, no `GameDifficulty`, no repository, no engine, no
+/// controller, no other feature's screen). All three actions are handed off
+/// entirely to [onStartGame], [onOpenRules], and [onOpenSettings], which the
+/// app-level composition root supplies; that composition root is the one
+/// place that turns the chosen difficulty into a `GameConfig` via
+/// `GameConfig.forSelection` (always with `GameConfig.visibleWordLength`)
+/// and owns navigation to the other screens.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
@@ -44,9 +50,10 @@ class HomeScreen extends StatefulWidget {
     required this.onOpenStatistics,
   });
 
-  /// Called with the chosen word length (4, 5, or 6) and difficulty when
-  /// the player starts a game.
-  final void Function(int wordLength, DifficultyOption difficulty) onStartGame;
+  /// Called with the chosen difficulty when the player starts a game. Every
+  /// game always uses a 4-letter secret word and 10 attempts, so no word
+  /// length is passed here.
+  final void Function(DifficultyOption difficulty) onStartGame;
 
   /// Called when the player wants to see the How to Play screen.
   final VoidCallback onOpenRules;
@@ -60,8 +67,6 @@ class HomeScreen extends StatefulWidget {
   /// with a `StatisticsController`.
   final VoidCallback onOpenStatistics;
 
-  static const List<int> _wordLengthOptions = [4, 5, 6];
-
   /// The difficulty preselected when Home first appears. `common` — the
   /// broadest, middle-of-the-road pool — is the least surprising default
   /// for a first-time player, neither the easiest nor the hardest option.
@@ -72,11 +77,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _selectedWordLength = HomeScreen._wordLengthOptions.first;
   DifficultyOption _selectedDifficulty = HomeScreen._defaultDifficulty;
 
   void _handleStart() {
-    widget.onStartGame(_selectedWordLength, _selectedDifficulty);
+    widget.onStartGame(_selectedDifficulty);
   }
 
   @override
@@ -104,7 +108,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 'Guess the secret word. Each guess earns a bull for every '
                 'letter that is correct and in the right position, and a '
                 'cow for every letter that is correct but in the wrong '
-                'position.',
+                'position. Every game uses a 4-letter secret word and gives '
+                'you 10 attempts.',
                 style: textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -117,58 +122,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Word length', style: textTheme.titleMedium),
-                      const SizedBox(height: AppSpacing.sm),
-                      Semantics(
-                        container: true,
-                        label: 'Word length selection',
-                        child: SegmentedButton<int>(
-                          style: SegmentedButton.styleFrom(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: segmentHorizontalPadding,
-                            ),
-                          ),
-                          segments: [
-                            for (final length in HomeScreen._wordLengthOptions)
-                              ButtonSegment(
-                                value: length,
-                                label: _SegmentLabel('$length letters'),
-                              ),
-                          ],
-                          selected: {_selectedWordLength},
-                          onSelectionChanged: (selection) => setState(
-                            () => _selectedWordLength = selection.first,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      AnimatedSwitcher(
-                        duration: AppMotion.durationFor(
-                          context,
-                          AppMotion.fast,
-                        ),
-                        switchInCurve: AppMotion.curve,
-                        child: Text(
-                          'You\'ll guess a $_selectedWordLength-letter '
-                          'secret word.',
-                          key: ValueKey(_selectedWordLength),
-                          style: textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
                       Text('Difficulty', style: textTheme.titleMedium),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Difficulty only changes which words the game can '
+                        'pick from.',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                       const SizedBox(height: AppSpacing.sm),
                       Semantics(
                         container: true,
@@ -338,7 +300,7 @@ class _DifficultyDescriptionRow extends StatelessWidget {
 
 /// A segmented-button label that always stays on one line.
 ///
-/// Root cause of the "Common" (and "4 letters"/etc.) wrapping bug: at
+/// Root cause of the "Medium" (and other segment labels) wrapping bug: at
 /// narrow widths or large text-scale factors, a segment's available width
 /// can be less than its label's natural single-line width, and a plain
 /// [Text] (which defaults to wrapping) breaks onto a second line instead of

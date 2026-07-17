@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   Widget buildSubject(
-    void Function(int wordLength, DifficultyOption difficulty) onStartGame, {
+    void Function(DifficultyOption difficulty) onStartGame, {
     VoidCallback? onOpenRules,
     VoidCallback? onOpenSettings,
     VoidCallback? onOpenStatistics,
@@ -21,107 +21,58 @@ void main() {
   }
 
   testWidgets('shows the app title', (tester) async {
-    await tester.pumpWidget(buildSubject((_, _) {}));
+    await tester.pumpWidget(buildSubject((_) {}));
     expect(find.text('Cow Bull Quest'), findsWidgets);
   });
 
   testWidgets('briefly explains the game', (tester) async {
-    await tester.pumpWidget(buildSubject((_, _) {}));
+    await tester.pumpWidget(buildSubject((_) {}));
     expect(find.textContaining('bull'), findsWidgets);
     expect(find.textContaining('cow'), findsWidgets);
   });
 
-  testWidgets('shows 4, 5, and 6 letter options', (tester) async {
-    await tester.pumpWidget(buildSubject((_, _) {}));
-    expect(find.text('4 letters'), findsOneWidget);
-    expect(find.text('5 letters'), findsOneWidget);
-    expect(find.text('6 letters'), findsOneWidget);
+  testWidgets('does not show a word-length selector', (tester) async {
+    await tester.pumpWidget(buildSubject((_) {}));
+    expect(find.byType(SegmentedButton<int>), findsNothing);
+    expect(find.text('Word length'), findsNothing);
+    expect(find.text('4 letters'), findsNothing);
+    expect(find.text('5 letters'), findsNothing);
+    expect(find.text('6 letters'), findsNothing);
+    expect(find.bySemanticsLabel('Word length selection'), findsNothing);
   });
 
-  testWidgets('defaults to the 4-letter option selected', (tester) async {
-    await tester.pumpWidget(buildSubject((_, _) {}));
-    final segmentedButton = tester.widget<SegmentedButton<int>>(
-      find.byType(SegmentedButton<int>),
-    );
-    expect(segmentedButton.selected, {4});
-  });
-
-  testWidgets('selecting an option updates the visible selection', (
+  testWidgets('explains every game uses a 4-letter word with 10 attempts', (
     tester,
   ) async {
-    await tester.pumpWidget(buildSubject((_, _) {}));
-
-    await tester.tap(find.text('6 letters'));
-    await tester.pumpAndSettle();
-
-    final segmentedButton = tester.widget<SegmentedButton<int>>(
-      find.byType(SegmentedButton<int>),
-    );
-    expect(segmentedButton.selected, {6});
-  });
-
-  testWidgets('starting the game emits the selected word length', (
-    tester,
-  ) async {
-    int? startedWordLength;
-    await tester.pumpWidget(
-      buildSubject((wordLength, difficulty) => startedWordLength = wordLength),
-    );
-
-    await tester.tap(find.text('5 letters'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Start Game'));
-    await tester.tap(find.text('Start Game'));
-    await tester.pumpAndSettle();
-
-    expect(startedWordLength, 5);
-  });
-
-  testWidgets('starting without changing the selection uses the default '
-      'option', (tester) async {
-    int? startedWordLength;
-    await tester.pumpWidget(
-      buildSubject((wordLength, difficulty) => startedWordLength = wordLength),
-    );
-
-    await tester.ensureVisible(find.text('Start Game'));
-    await tester.tap(find.text('Start Game'));
-    await tester.pumpAndSettle();
-
-    expect(startedWordLength, 4);
-  });
-
-  testWidgets('has a semantic label for the word length selection', (
-    tester,
-  ) async {
-    await tester.pumpWidget(buildSubject((_, _) {}));
-    expect(find.bySemanticsLabel('Word length selection'), findsOneWidget);
+    await tester.pumpWidget(buildSubject((_) {}));
+    expect(find.textContaining('4-letter'), findsWidgets);
+    expect(find.textContaining('10 attempts'), findsWidgets);
   });
 
   testWidgets('shows the Start Game action', (tester) async {
-    await tester.pumpWidget(buildSubject((_, _) {}));
+    await tester.pumpWidget(buildSubject((_) {}));
     expect(find.widgetWithText(FilledButton, 'Start Game'), findsOneWidget);
   });
 
   testWidgets('shows the How to Play action', (tester) async {
-    await tester.pumpWidget(buildSubject((_, _) {}));
+    await tester.pumpWidget(buildSubject((_) {}));
     expect(find.text('How to Play'), findsOneWidget);
   });
 
   testWidgets('shows the Settings action', (tester) async {
-    await tester.pumpWidget(buildSubject((_, _) {}));
+    await tester.pumpWidget(buildSubject((_) {}));
     expect(find.text('Settings'), findsOneWidget);
   });
 
   testWidgets('shows the Statistics action', (tester) async {
-    await tester.pumpWidget(buildSubject((_, _) {}));
+    await tester.pumpWidget(buildSubject((_) {}));
     expect(find.text('Statistics'), findsOneWidget);
   });
 
   testWidgets('Start Game is visually distinct from the secondary actions', (
     tester,
   ) async {
-    await tester.pumpWidget(buildSubject((_, _) {}));
+    await tester.pumpWidget(buildSubject((_) {}));
     expect(find.widgetWithText(FilledButton, 'Start Game'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'How to Play'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Settings'), findsOneWidget);
@@ -132,7 +83,7 @@ void main() {
   ) async {
     var callCount = 0;
     await tester.pumpWidget(
-      buildSubject((_, _) {}, onOpenRules: () => callCount++),
+      buildSubject((_) {}, onOpenRules: () => callCount++),
     );
 
     await tester.ensureVisible(find.text('How to Play'));
@@ -147,7 +98,7 @@ void main() {
   ) async {
     var callCount = 0;
     await tester.pumpWidget(
-      buildSubject((_, _) {}, onOpenSettings: () => callCount++),
+      buildSubject((_) {}, onOpenSettings: () => callCount++),
     );
 
     await tester.ensureVisible(find.text('Settings'));
@@ -162,7 +113,7 @@ void main() {
   ) async {
     var callCount = 0;
     await tester.pumpWidget(
-      buildSubject((_, _) {}, onOpenStatistics: () => callCount++),
+      buildSubject((_) {}, onOpenStatistics: () => callCount++),
     );
 
     await tester.ensureVisible(find.text('Statistics'));
@@ -176,7 +127,7 @@ void main() {
     tester,
   ) async {
     var callCount = 0;
-    await tester.pumpWidget(buildSubject((_, _) => callCount++));
+    await tester.pumpWidget(buildSubject((_) => callCount++));
 
     await tester.ensureVisible(find.text('Start Game'));
     await tester.tap(find.text('Start Game'));
@@ -186,24 +137,29 @@ void main() {
   });
 
   group('HomeScreen difficulty selection', () {
-    testWidgets('shows Easy, Common, and Hard options', (tester) async {
-      await tester.pumpWidget(buildSubject((_, _) {}));
+    testWidgets('shows Easy, Medium, and Hard options', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}));
       expect(find.text('Easy'), findsOneWidget);
-      expect(find.text('Common'), findsOneWidget);
+      expect(find.text('Medium'), findsOneWidget);
       expect(find.text('Hard'), findsOneWidget);
+    });
+
+    testWidgets('never shows "Common" as a difficulty label', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}));
+      expect(find.text('Common'), findsNothing);
     });
 
     testWidgets('shows a concise description for each difficulty', (
       tester,
     ) async {
-      await tester.pumpWidget(buildSubject((_, _) {}));
+      await tester.pumpWidget(buildSubject((_) {}));
       expect(find.textContaining('high-frequency'), findsOneWidget);
       expect(find.textContaining('everyday vocabulary'), findsOneWidget);
       expect(find.textContaining('trickier'), findsOneWidget);
     });
 
-    testWidgets('defaults to Common selected', (tester) async {
-      await tester.pumpWidget(buildSubject((_, _) {}));
+    testWidgets('defaults to Medium selected', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}));
       final segmentedButton = tester.widget<SegmentedButton<DifficultyOption>>(
         find.byType(SegmentedButton<DifficultyOption>),
       );
@@ -213,7 +169,7 @@ void main() {
     testWidgets('selecting a difficulty updates the visible selection', (
       tester,
     ) async {
-      await tester.pumpWidget(buildSubject((_, _) {}));
+      await tester.pumpWidget(buildSubject((_) {}));
 
       await tester.tap(find.text('Hard'));
       await tester.pumpAndSettle();
@@ -229,9 +185,7 @@ void main() {
     ) async {
       DifficultyOption? startedDifficulty;
       await tester.pumpWidget(
-        buildSubject(
-          (wordLength, difficulty) => startedDifficulty = difficulty,
-        ),
+        buildSubject((difficulty) => startedDifficulty = difficulty),
       );
 
       await tester.tap(find.text('Easy'));
@@ -244,12 +198,10 @@ void main() {
     });
 
     testWidgets('starting without changing the selection uses the '
-        'documented default (Common)', (tester) async {
+        'documented default (Medium/common)', (tester) async {
       DifficultyOption? startedDifficulty;
       await tester.pumpWidget(
-        buildSubject(
-          (wordLength, difficulty) => startedDifficulty = difficulty,
-        ),
+        buildSubject((difficulty) => startedDifficulty = difficulty),
       );
 
       await tester.ensureVisible(find.text('Start Game'));
@@ -262,32 +214,32 @@ void main() {
     testWidgets('has a semantic label for the difficulty selection', (
       tester,
     ) async {
-      await tester.pumpWidget(buildSubject((_, _) {}));
+      await tester.pumpWidget(buildSubject((_) {}));
       expect(find.bySemanticsLabel('Difficulty selection'), findsOneWidget);
     });
 
-    testWidgets('starting the game emits both word length and difficulty', (
+    testWidgets('every difficulty is reachable and each starts a game', (
       tester,
     ) async {
-      int? startedWordLength;
-      DifficultyOption? startedDifficulty;
-      await tester.pumpWidget(
-        buildSubject((wordLength, difficulty) {
-          startedWordLength = wordLength;
-          startedDifficulty = difficulty;
-        }),
-      );
+      for (final option in DifficultyOption.values) {
+        DifficultyOption? startedDifficulty;
+        await tester.pumpWidget(
+          buildSubject((difficulty) => startedDifficulty = difficulty),
+        );
 
-      await tester.tap(find.text('6 letters'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Hard'));
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Start Game'));
-      await tester.tap(find.text('Start Game'));
-      await tester.pumpAndSettle();
+        final label = switch (option) {
+          DifficultyOption.easy => 'Easy',
+          DifficultyOption.common => 'Medium',
+          DifficultyOption.hard => 'Hard',
+        };
+        await tester.tap(find.text(label));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Start Game'));
+        await tester.tap(find.text('Start Game'));
+        await tester.pumpAndSettle();
 
-      expect(startedWordLength, 6);
-      expect(startedDifficulty, DifficultyOption.hard);
+        expect(startedDifficulty, option);
+      }
     });
   });
 
@@ -297,7 +249,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(buildSubject((_, _) {}));
+    await tester.pumpWidget(buildSubject((_) {}));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
@@ -307,7 +259,7 @@ void main() {
     await tester.pumpWidget(
       MediaQuery(
         data: const MediaQueryData(textScaler: TextScaler.linear(3.0)),
-        child: buildSubject((_, _) {}),
+        child: buildSubject((_) {}),
       ),
     );
     await tester.pumpAndSettle();
@@ -318,7 +270,7 @@ void main() {
   group('selector label wrapping fix', () {
     /// Every [Text] rendered inside a [SegmentedButton] of type [T] is
     /// configured to never wrap onto a second line - the structural half of
-    /// the "Common" wrapping fix (the other half, [FittedBox] scale-down, is
+    /// the "Medium" wrapping fix (the other half, [FittedBox] scale-down, is
     /// what keeps that single line from overflowing/clipping instead).
     void expectSingleLineSegments<T>(WidgetTester tester) {
       final texts = tester.widgetList<Text>(
@@ -334,86 +286,67 @@ void main() {
       }
     }
 
-    testWidgets('word-length segment labels are configured as single-line', (
-      tester,
-    ) async {
-      await tester.pumpWidget(buildSubject((_, _) {}));
-      expectSingleLineSegments<int>(tester);
-    });
-
     testWidgets(
-      'Easy/Common/Hard segment labels are configured as single-line',
+      'Easy/Medium/Hard segment labels are configured as single-line',
       (tester) async {
-        await tester.pumpWidget(buildSubject((_, _) {}));
+        await tester.pumpWidget(buildSubject((_) {}));
         expectSingleLineSegments<DifficultyOption>(tester);
       },
     );
 
     testWidgets(
-      'Easy, Common, and Hard remain visible without overflow at 320x568',
+      'Easy, Medium, and Hard remain visible without overflow at 320x568',
       (tester) async {
         tester.view.physicalSize = const Size(320, 568);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
 
-        await tester.pumpWidget(buildSubject((_, _) {}));
+        await tester.pumpWidget(buildSubject((_) {}));
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
         expect(find.text('Easy'), findsOneWidget);
-        expect(find.text('Common'), findsOneWidget);
+        expect(find.text('Medium'), findsOneWidget);
         expect(find.text('Hard'), findsOneWidget);
-        expect(find.text('4 letters'), findsOneWidget);
       },
     );
 
     testWidgets(
-      'Easy, Common, and Hard remain visible without overflow at 3x text '
+      'Easy, Medium, and Hard remain visible without overflow at 3x text '
       'scale',
       (tester) async {
         await tester.pumpWidget(
           MediaQuery(
             data: const MediaQueryData(textScaler: TextScaler.linear(3.0)),
-            child: buildSubject((_, _) {}),
+            child: buildSubject((_) {}),
           ),
         );
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
         expect(find.text('Easy'), findsOneWidget);
-        expect(find.text('Common'), findsOneWidget);
+        expect(find.text('Medium'), findsOneWidget);
         expect(find.text('Hard'), findsOneWidget);
-        expect(find.text('4 letters'), findsOneWidget);
       },
     );
 
     testWidgets('the difficulty selector keeps at least a 48 logical-pixel tap '
         'target height', (tester) async {
-      await tester.pumpWidget(buildSubject((_, _) {}));
+      await tester.pumpWidget(buildSubject((_) {}));
       final size = tester.getSize(
         find.byType(SegmentedButton<DifficultyOption>),
       );
       expect(size.height, greaterThanOrEqualTo(48));
     });
 
-    testWidgets(
-      'the word-length selector keeps at least a 48 logical-pixel tap '
-      'target height',
-      (tester) async {
-        await tester.pumpWidget(buildSubject((_, _) {}));
-        final size = tester.getSize(find.byType(SegmentedButton<int>));
-        expect(size.height, greaterThanOrEqualTo(48));
-      },
-    );
-
-    testWidgets('selecting Common still updates the selection (semantic '
+    testWidgets('selecting Medium still updates the selection (semantic '
         'label is preserved, not just the shrunk visual label)', (
       tester,
     ) async {
-      await tester.pumpWidget(buildSubject((_, _) {}));
+      await tester.pumpWidget(buildSubject((_) {}));
 
-      await tester.tap(find.text('Common'));
+      await tester.tap(find.text('Medium'));
       await tester.pumpAndSettle();
 
       final segmentedButton = tester.widget<SegmentedButton<DifficultyOption>>(
@@ -427,7 +360,7 @@ void main() {
     testWidgets('displays the approved branding icon as a runtime asset', (
       tester,
     ) async {
-      await tester.pumpWidget(buildSubject((_, _) {}));
+      await tester.pumpWidget(buildSubject((_) {}));
 
       final image = tester.widget<Image>(find.byType(Image));
       final provider = image.image as AssetImage;
@@ -436,7 +369,7 @@ void main() {
 
     testWidgets('the branding icon is marked decorative so the adjacent '
         'title is not announced twice', (tester) async {
-      await tester.pumpWidget(buildSubject((_, _) {}));
+      await tester.pumpWidget(buildSubject((_) {}));
 
       expect(
         find.ancestor(
@@ -448,24 +381,10 @@ void main() {
     });
   });
 
-  testWidgets(
-    'the word-length summary updates when a different length is selected',
-    (tester) async {
-      await tester.pumpWidget(buildSubject((_, _) {}));
-      expect(find.textContaining("guess a 4-letter"), findsOneWidget);
-
-      await tester.tap(find.text('6 letters'));
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining("guess a 4-letter"), findsNothing);
-      expect(find.textContaining("guess a 6-letter"), findsOneWidget);
-    },
-  );
-
   testWidgets('Start Game has a minimum accessible tap target height', (
     tester,
   ) async {
-    await tester.pumpWidget(buildSubject((_, _) {}));
+    await tester.pumpWidget(buildSubject((_) {}));
 
     final size = tester.getSize(
       find.widgetWithText(FilledButton, 'Start Game'),
@@ -480,31 +399,12 @@ void main() {
       await tester.pumpWidget(
         MediaQuery(
           data: const MediaQueryData(disableAnimations: true),
-          child: buildSubject((_, _) {}),
+          child: buildSubject((_) {}),
         ),
       );
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
     });
-
-    testWidgets(
-      'the word-length summary reaches its final text after a single frame '
-      '(no settling needed)',
-      (tester) async {
-        await tester.pumpWidget(
-          MediaQuery(
-            data: const MediaQueryData(disableAnimations: true),
-            child: buildSubject((_, _) {}),
-          ),
-        );
-
-        await tester.tap(find.text('6 letters'));
-        await tester.pump(); // exactly one frame, no pumpAndSettle
-
-        expect(find.textContaining('guess a 6-letter'), findsOneWidget);
-        expect(find.textContaining('guess a 4-letter'), findsNothing);
-      },
-    );
   });
 }

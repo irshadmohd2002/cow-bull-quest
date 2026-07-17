@@ -145,22 +145,6 @@ class CowBullApp extends StatefulWidget {
 class _CowBullAppState extends State<CowBullApp> {
   static const GameEngine _gameEngine = GameEngine();
 
-  /// Attempt-limit display data for the `rules` feature, keyed by word
-  /// length. Read from [GameConfig] only here — the app-level composition
-  /// root — and handed to [RulesScreen] as a presentation-neutral map, so
-  /// the `rules` feature never needs to import `GameConfig` itself.
-  ///
-  /// [maxAttempts] depends only on word length, never difficulty (see
-  /// [GameConfig]), so the difficulty passed here to satisfy
-  /// [GameConfig.forSelection]'s required parameter is arbitrary.
-  static final Map<int, int> _attemptLimitsByWordLength = {
-    for (final wordLength in const [4, 5, 6])
-      wordLength: GameConfig.forSelection(
-        wordLength: wordLength,
-        difficulty: GameDifficulty.common,
-      ).maxAttempts,
-  };
-
   /// The settings instance actually in use — either [CowBullApp.settings]
   /// verbatim, or one freshly created here (non-persistent — see the
   /// class-level doc on [CowBullApp.settings]). Resolved once in [initState]
@@ -204,12 +188,17 @@ class _CowBullAppState extends State<CowBullApp> {
     super.dispose();
   }
 
-  /// Turns the word length and difficulty [HomeScreen] hands back into a
-  /// [GameConfig] — the only place that happens, since [HomeScreen] itself
-  /// never imports the `game` feature — then pushes [GameScreen] with a
-  /// freshly created [GameController]. A [GameController] is created only
-  /// here, at the moment a game actually starts, and is owned and disposed
-  /// exactly once by [GameScreen] itself.
+  /// Turns the difficulty [HomeScreen] hands back into a [GameConfig] — the
+  /// only place that happens, since [HomeScreen] itself never imports the
+  /// `game` feature — then pushes [GameScreen] with a freshly created
+  /// [GameController]. A [GameController] is created only here, at the
+  /// moment a game actually starts, and is owned and disposed exactly once
+  /// by [GameScreen] itself.
+  ///
+  /// Every visible game always uses [GameConfig.visibleWordLength] (4
+  /// letters, 10 attempts) — [HomeScreen] no longer offers any other word
+  /// length (see Milestone 12), so there is no stored or passed-in word
+  /// length here that could ever be a stale 5 or 6 from an older install.
   ///
   /// The controller's `onGameCompleted` hook is wired to [_recordCompletedGame]
   /// so every won/lost game is recorded into statistics exactly once, right
@@ -218,13 +207,9 @@ class _CowBullAppState extends State<CowBullApp> {
   /// through to the eventual completed-game record: it is already the
   /// feature-neutral [DifficultyOption] statistics needs, so no separate
   /// `GameDifficulty`-to-neutral mapping is needed at completion time.
-  void _startGame(
-    BuildContext context,
-    int wordLength,
-    DifficultyOption difficulty,
-  ) {
+  void _startGame(BuildContext context, DifficultyOption difficulty) {
     final config = GameConfig.forSelection(
-      wordLength: wordLength,
+      wordLength: GameConfig.visibleWordLength,
       difficulty: _toGameDifficulty(difficulty),
     );
     unawaited(
@@ -301,13 +286,7 @@ class _CowBullAppState extends State<CowBullApp> {
   }
 
   void _openRules(BuildContext context) {
-    unawaited(
-      _pushOnce(
-        context,
-        (_) =>
-            RulesScreen(attemptLimitsByWordLength: _attemptLimitsByWordLength),
-      ),
-    );
+    unawaited(_pushOnce(context, (_) => const RulesScreen()));
   }
 
   void _openSettings(BuildContext context) {
@@ -398,8 +377,7 @@ class _CowBullAppState extends State<CowBullApp> {
         themeMode: _settings.themeMode,
         home: Builder(
           builder: (context) => HomeScreen(
-            onStartGame: (wordLength, difficulty) =>
-                _startGame(context, wordLength, difficulty),
+            onStartGame: (difficulty) => _startGame(context, difficulty),
             onOpenRules: () => _openRules(context),
             onOpenSettings: () => _openSettings(context),
             onOpenStatistics: () => _openStatistics(context),

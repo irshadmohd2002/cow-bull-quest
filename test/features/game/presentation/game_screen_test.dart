@@ -584,6 +584,88 @@ void main() {
     expect(field.focusNode!.hasFocus, isTrue);
   });
 
+  group('empty guess history guidance', () {
+    testWidgets('is shown when a new game begins', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Enter any 4-letter word to start the game.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('remains visible after an invalid guess, since the game '
+        'has not started yet', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      await enterAndSubmit(tester, 'to');
+
+      expect(
+        find.text('Your guess must be exactly 4 letters.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Enter any 4-letter word to start the game.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('disappears immediately after the first valid guess is '
+        'accepted', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      await enterAndSubmit(tester, 'race');
+
+      expect(find.text('RACE'), findsOneWidget);
+      expect(
+        find.text('Enter any 4-letter word to start the game.'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('the old "Start guessing" phrase is never shown', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Start guessing'), findsNothing);
+
+      await enterAndSubmit(tester, 'to');
+      expect(find.textContaining('Start guessing'), findsNothing);
+
+      await enterAndSubmit(tester, 'race');
+      expect(find.textContaining('Start guessing'), findsNothing);
+    });
+  });
+
   group('reduced motion', () {
     testWidgets('renders without exceptions when animations are disabled', (
       tester,

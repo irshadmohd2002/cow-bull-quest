@@ -90,6 +90,24 @@ void main() {
     });
   });
 
+  group('GameConfig.visibleWordLength', () {
+    test('is 4 — the only word length the current UI can start', () {
+      expect(GameConfig.visibleWordLength, 4);
+    });
+
+    test('every difficulty produces a 10-attempt config at the visible '
+        'word length', () {
+      for (final difficulty in GameDifficulty.values) {
+        final config = GameConfig.forSelection(
+          wordLength: GameConfig.visibleWordLength,
+          difficulty: difficulty,
+        );
+        expect(config.wordLength, 4);
+        expect(config.maxAttempts, 10);
+      }
+    });
+  });
+
   group('GameConfig equality', () {
     test('instances built from the same word length and difficulty are '
         'equal', () {

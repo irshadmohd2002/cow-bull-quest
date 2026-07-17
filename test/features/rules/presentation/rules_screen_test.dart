@@ -3,12 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  const attemptLimits = {4: 10, 5: 15, 6: 20};
-
   Widget buildSubject() {
-    return const MaterialApp(
-      home: RulesScreen(attemptLimitsByWordLength: attemptLimits),
-    );
+    return const MaterialApp(home: RulesScreen());
   }
 
   testWidgets('shows the title', (tester) async {
@@ -54,19 +50,24 @@ void main() {
     expect(find.textContaining('does not use up an attempt'), findsOneWidget);
   });
 
-  testWidgets('shows the 4, 5, and 6 letter attempt limits', (tester) async {
+  testWidgets('states every game uses a 4-letter secret word and 10 '
+      'attempts', (tester) async {
     await tester.pumpWidget(buildSubject());
-    expect(find.textContaining('4 letters: 10 attempts'), findsOneWidget);
-    expect(find.textContaining('5 letters: 15 attempts'), findsOneWidget);
-    expect(find.textContaining('6 letters: 20 attempts'), findsOneWidget);
+    expect(find.textContaining('4-letter secret word'), findsOneWidget);
+    expect(find.textContaining('10 attempts'), findsOneWidget);
   });
 
   group('difficulty explanations', () {
     testWidgets('shows all three difficulty headings', (tester) async {
       await tester.pumpWidget(buildSubject());
       expect(find.text('Easy'), findsOneWidget);
-      expect(find.text('Common'), findsOneWidget);
+      expect(find.text('Medium'), findsOneWidget);
       expect(find.text('Hard'), findsOneWidget);
+    });
+
+    testWidgets('never shows "Common" as a difficulty label', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.text('Common'), findsNothing);
     });
 
     testWidgets('explains each difficulty tier', (tester) async {
@@ -76,11 +77,11 @@ void main() {
       expect(find.textContaining('Less frequent words'), findsOneWidget);
     });
 
-    testWidgets('clarifies difficulty only changes word selection, not attempt '
-        'limits or scoring', (tester) async {
+    testWidgets('clarifies difficulty only changes vocabulary, not word '
+        'length or attempts', (tester) async {
       await tester.pumpWidget(buildSubject());
       expect(
-        find.textContaining('never changes scoring or attempt limits'),
+        find.textContaining('Difficulty only changes which vocabulary'),
         findsOneWidget,
       );
     });
@@ -133,11 +134,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('shows the four section headings', (tester) async {
+  testWidgets('shows the three section headings', (tester) async {
     await tester.pumpWidget(buildSubject());
     expect(find.text('Scoring'), findsOneWidget);
     expect(find.text('Difficulty'), findsOneWidget);
-    expect(find.text('Attempt limits'), findsOneWidget);
     expect(find.text('Examples'), findsOneWidget);
   });
 

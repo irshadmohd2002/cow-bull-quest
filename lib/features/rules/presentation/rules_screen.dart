@@ -5,24 +5,16 @@ import '../../../theme/app_spacing.dart';
 /// Explains how Bulls & Cows is played.
 ///
 /// Purely presentational and feature-local: it imports nothing from the
-/// `game` feature. The attempt-limit numbers shown per word length are
-/// display data only — a presentation-neutral `Map<int, int>` of word
-/// length to attempt limit — supplied by the app-level composition root
-/// (which is the only place permitted to read them from `GameConfig`), so
-/// this feature never needs to import `GameConfig` just to read that
-/// mapping.
+/// `game` feature. Every game always uses a 4-letter secret word and 10
+/// attempts (see Milestone 12), so that fact is stated directly as plain
+/// copy here rather than read from `GameConfig`.
 class RulesScreen extends StatelessWidget {
-  const RulesScreen({super.key, required this.attemptLimitsByWordLength});
-
-  /// Word length (4, 5, or 6) mapped to its attempt limit, supplied by the
-  /// app-level composition root.
-  final Map<int, int> attemptLimitsByWordLength;
+  const RulesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
-    final sortedLengths = attemptLimitsByWordLength.keys.toList()..sort();
 
     return Scaffold(
       appBar: AppBar(title: const Text('How to Play')),
@@ -101,8 +93,10 @@ class RulesScreen extends StatelessWidget {
               _SectionHeading('Difficulty'),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'Difficulty only changes which secret words the game can '
-                'pick from — it never changes scoring or attempt limits.',
+                'Difficulty only changes which vocabulary the secret word '
+                'is drawn from — every game uses a 4-letter secret word and '
+                'gives you 10 attempts to guess it, no matter which '
+                'difficulty you pick.',
                 style: textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -122,7 +116,7 @@ class RulesScreen extends StatelessWidget {
                       SizedBox(height: AppSpacing.md),
                       _RuleItem(
                         icon: Icons.balance,
-                        heading: 'Common',
+                        heading: 'Medium',
                         explanation: 'Broader everyday vocabulary.',
                       ),
                       SizedBox(height: AppSpacing.md),
@@ -133,25 +127,6 @@ class RulesScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              _SectionHeading('Attempt limits'),
-              const SizedBox(height: AppSpacing.sm),
-              Semantics(
-                container: true,
-                child: Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: [
-                    for (final wordLength in sortedLengths)
-                      Chip(
-                        label: Text(
-                          '$wordLength letters: '
-                          '${attemptLimitsByWordLength[wordLength]} attempts',
-                        ),
-                      ),
-                  ],
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),

@@ -22,7 +22,7 @@ class GuessHistory extends StatelessWidget {
       return Center(
         child: Semantics(
           excludeSemantics: true,
-          label: 'No guesses yet. Make your first guess.',
+          label: 'Enter any 4-letter word to start the game.',
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -33,10 +33,11 @@ class GuessHistory extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'No guesses yet. Make your first guess!',
+                'Enter any 4-letter word to start the game.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
+                textAlign: TextAlign.center,
               ),
             ],
           ),

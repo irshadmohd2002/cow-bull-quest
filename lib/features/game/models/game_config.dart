@@ -46,6 +46,15 @@ class GameConfig {
 
   static const Map<int, int> _maxAttemptsByWordLength = {4: 10, 5: 15, 6: 20};
 
+  /// The only secret-word length reachable through the current UI — Home no
+  /// longer offers a word-length choice (see Milestone 12). 5- and 6-letter
+  /// support remains fully intact here and in `WordRepository` for possible
+  /// future use; this is just the length every *visible* game uses. No
+  /// preference for a different word length has ever been persisted by this
+  /// app (Home's old selector was ephemeral, in-memory UI state), so there is
+  /// nothing to migrate — a game is simply always started with this length.
+  static const int visibleWordLength = 4;
+
   /// The secret word's length for this configuration.
   final int wordLength;
 

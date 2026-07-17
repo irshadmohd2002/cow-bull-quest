@@ -25,7 +25,7 @@ const List<DifficultyOption> _difficultyBreakdownOrder = [
 
 String _difficultyLabel(DifficultyOption option) => switch (option) {
   DifficultyOption.easy => 'Easy',
-  DifficultyOption.common => 'Common',
+  DifficultyOption.common => 'Medium',
   DifficultyOption.hard => 'Hard',
 };
 

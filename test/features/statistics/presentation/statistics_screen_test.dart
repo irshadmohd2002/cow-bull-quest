@@ -98,8 +98,17 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Easy'), findsOneWidget);
-      expect(find.text('Common'), findsOneWidget);
+      expect(find.text('Medium'), findsOneWidget);
       expect(find.text('Hard'), findsOneWidget);
+    });
+
+    testWidgets('never shows "Common" as a difficulty label', (tester) async {
+      await tester.pumpWidget(
+        _buildSubject(state: StatisticsReady(_readySnapshot())),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Common'), findsNothing);
     });
 
     testWidgets('shows the recent games list newest-first', (tester) async {

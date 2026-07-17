@@ -42,7 +42,7 @@ String _validationMessage(GuessValidationFailure reason, int wordLength) {
 /// domain enum itself — the domain layer only ever exposes typed values.
 String _difficultyLabel(GameDifficulty difficulty) => switch (difficulty) {
   GameDifficulty.easy => 'Easy',
-  GameDifficulty.common => 'Common',
+  GameDifficulty.common => 'Medium',
   GameDifficulty.hard => 'Hard',
 };
 

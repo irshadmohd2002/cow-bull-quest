@@ -10,7 +10,7 @@ import '../../models/game_outcome.dart';
 /// [DifficultyOption] itself carries no human-facing text.
 String _difficultyLabel(DifficultyOption option) => switch (option) {
   DifficultyOption.easy => 'Easy',
-  DifficultyOption.common => 'Common',
+  DifficultyOption.common => 'Medium',
   DifficultyOption.hard => 'Hard',
 };
 

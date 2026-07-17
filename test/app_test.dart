@@ -93,30 +93,14 @@ void main() {
     expect(find.text('Start Game'), findsOneWidget);
   });
 
-  testWidgets('4, 5, and 6 letter options are visible on launch', (
-    tester,
-  ) async {
+  testWidgets('no word-length selector is visible on launch', (tester) async {
     await tester.pumpWidget(CowBullApp(wordRepository: _FakeWordRepository()));
     await tester.pumpAndSettle();
 
-    expect(find.text('4 letters'), findsOneWidget);
-    expect(find.text('5 letters'), findsOneWidget);
-    expect(find.text('6 letters'), findsOneWidget);
-  });
-
-  testWidgets('selecting an option updates the visible selection', (
-    tester,
-  ) async {
-    await tester.pumpWidget(CowBullApp(wordRepository: _FakeWordRepository()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('6 letters'));
-    await tester.pumpAndSettle();
-
-    final segmentedButton = tester.widget<SegmentedButton<int>>(
-      find.byType(SegmentedButton<int>),
-    );
-    expect(segmentedButton.selected, {6});
+    expect(find.byType(SegmentedButton<int>), findsNothing);
+    expect(find.text('4 letters'), findsNothing);
+    expect(find.text('5 letters'), findsNothing);
+    expect(find.text('6 letters'), findsNothing);
   });
 
   testWidgets('starting a game navigates to the gameplay screen', (
@@ -135,21 +119,21 @@ void main() {
     expect(find.bySemanticsLabel('Guess input, 4 letters'), findsOneWidget);
   });
 
-  testWidgets('starting a game uses the correct GameConfig for the '
-      'selected word length', (tester) async {
-    final repo = _FakeWordRepository()..wordsByLength[6] = 'garden';
+  testWidgets('starting a game always uses a 4-letter GameConfig with 10 '
+      'attempts, regardless of difficulty', (tester) async {
+    final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
     await tester.pumpWidget(CowBullApp(wordRepository: repo));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('6 letters'));
+    await tester.tap(find.text('Hard'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Start Game'));
     await tester.tap(find.text('Start Game'));
     await tester.pumpAndSettle();
 
-    expect(find.bySemanticsLabel('Guess input, 6 letters'), findsOneWidget);
-    // Attempts limit for 6-letter games (GameConfig.forSelection).
-    expect(find.textContaining('20'), findsWidgets);
+    expect(find.bySemanticsLabel('Guess input, 4 letters'), findsOneWidget);
+    // Attempts limit for 4-letter games (GameConfig.forSelection).
+    expect(find.textContaining('10'), findsWidgets);
   });
 
   testWidgets('starting a game uses the correct GameConfig for the '
