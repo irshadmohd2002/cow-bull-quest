@@ -18,6 +18,65 @@ class _UpperCaseTextFormatter extends TextInputFormatter {
   ) => newValue.copyWith(text: newValue.text.toUpperCase());
 }
 
+/// Horizontal space reserved inside the field for its content padding and
+/// border, kept on top of the measured letter width so the fitted text never
+/// touches the field's edges.
+const double _guessFieldHorizontalChrome = 40;
+
+/// Floor below which the guess text never shrinks further — small enough to
+/// always fit even extreme combinations of narrow width and text scale, but
+/// still legible.
+const double _minGuessFontSize = 10;
+
+/// The largest font size, no larger than [baseStyle]'s own size, at which
+/// [wordLength] worst-case-width letters render on one line within
+/// [maxWidth] under [textScaler].
+///
+/// [TextField] has no child widget around just its visible text to wrap in a
+/// `FittedBox`, so this measures with the same [TextPainter] machinery
+/// `FittedBox` uses internally and feeds the result back in as an explicit
+/// `style.fontSize` — a robust equivalent that leaves the field's own box
+/// (border, height, decoration) untouched.
+double _fittedGuessFontSize({
+  required TextStyle baseStyle,
+  required TextScaler textScaler,
+  required double maxWidth,
+  required int wordLength,
+}) {
+  final baseFontSize = baseStyle.fontSize ?? 16;
+  if (!maxWidth.isFinite || wordLength <= 0) return baseFontSize;
+
+  final available = maxWidth - _guessFieldHorizontalChrome;
+  if (available <= 0) return _minGuessFontSize;
+
+  double measureWidth(double fontSize) {
+    final painter = TextPainter(
+      text: TextSpan(
+        // "W" is among the widest uppercase glyphs in most fonts; typed
+        // text is always uppercased, so this is a safe worst case.
+        text: 'W' * wordLength,
+        style: baseStyle.copyWith(fontSize: fontSize),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: textScaler,
+    )..layout();
+    return painter.width;
+  }
+
+  var fontSize = baseFontSize;
+  var width = measureWidth(fontSize);
+  if (width <= available) return baseFontSize;
+
+  // Two passes: an initial proportional estimate, then one correction for
+  // any non-linearity in the platform's TextScaler curve.
+  for (var pass = 0; pass < 2 && width > available; pass++) {
+    final scale = (available / width) * 0.97;
+    fontSize = (fontSize * scale).clamp(_minGuessFontSize, baseFontSize);
+    width = measureWidth(fontSize);
+  }
+  return fontSize;
+}
+
 /// The text field and submit action for entering one guess.
 ///
 /// Restricts input to alphabetic characters and [wordLength] characters as a
@@ -136,24 +195,43 @@ class _GuessInputState extends State<GuessInput>
             child: Semantics(
               label: 'Guess input, ${widget.wordLength} letters',
               textField: true,
-              child: TextField(
-                controller: widget.controller,
-                focusNode: widget.focusNode,
-                enabled: widget.enabled,
-                autofocus: true,
-                textCapitalization: TextCapitalization.characters,
-                textInputAction: TextInputAction.done,
-                maxLength: widget.wordLength,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp('[a-zA-Z]')),
-                  const _UpperCaseTextFormatter(),
-                ],
-                decoration: InputDecoration(
-                  labelText: 'Your guess',
-                  enabledBorder: errorBorder,
-                  focusedBorder: errorBorder,
-                ),
-                onSubmitted: widget.enabled ? (_) => _handleSubmit() : null,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Material 3's own default TextField text style, so this
+                  // measures (and renders) exactly what would have shown up
+                  // if `style` were left unset — normal-width screens see no
+                  // visual change, only narrow ones get a smaller font.
+                  final baseStyle = Theme.of(context).textTheme.bodyLarge!;
+                  final fontSize = _fittedGuessFontSize(
+                    baseStyle: baseStyle,
+                    textScaler: MediaQuery.textScalerOf(context),
+                    maxWidth: constraints.maxWidth,
+                    wordLength: widget.wordLength,
+                  );
+                  return TextField(
+                    controller: widget.controller,
+                    focusNode: widget.focusNode,
+                    enabled: widget.enabled,
+                    autofocus: true,
+                    textCapitalization: TextCapitalization.characters,
+                    textInputAction: TextInputAction.done,
+                    keyboardType: TextInputType.text,
+                    maxLines: 1,
+                    minLines: 1,
+                    maxLength: widget.wordLength,
+                    style: baseStyle.copyWith(fontSize: fontSize),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp('[a-zA-Z]')),
+                      const _UpperCaseTextFormatter(),
+                    ],
+                    decoration: InputDecoration(
+                      labelText: 'Your guess',
+                      enabledBorder: errorBorder,
+                      focusedBorder: errorBorder,
+                    ),
+                    onSubmitted: widget.enabled ? (_) => _handleSubmit() : null,
+                  );
+                },
               ),
             ),
           ),
