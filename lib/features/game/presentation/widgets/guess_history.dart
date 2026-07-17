@@ -12,10 +12,21 @@ import 'guess_history_tile.dart';
 /// player needs to see next, and with attempt limits of up to 20 a
 /// newest-first list keeps it visible without scrolling.
 class GuessHistory extends StatefulWidget {
-  const GuessHistory({super.key, required this.guesses});
+  const GuessHistory({
+    super.key,
+    required this.guesses,
+    this.shrinkWrap = false,
+  });
 
   /// The guesses made so far, oldest first (as produced by [GameSession]).
   final List<Guess> guesses;
+
+  /// When `true`, sizes to its content and disables its own scrolling
+  /// instead of requiring a bounded/flexible ancestor (e.g. `Expanded` or
+  /// `SliverFillRemaining`) — for a caller that already places this widget
+  /// inside its own scrollable region (see the completed-game screen) and
+  /// would otherwise end up with two nested scrollables.
+  final bool shrinkWrap;
 
   @override
   State<GuessHistory> createState() => _GuessHistoryState();
@@ -68,44 +79,53 @@ class _GuessHistoryState extends State<GuessHistory> {
     }
   }
 
+  Widget _emptyState(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Semantics(
+        excludeSemantics: true,
+        label: 'Enter any 4-letter word to start the game.',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.history_edu_outlined,
+              size: 40,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Enter any 4-letter word to start the game.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.guesses.isEmpty) {
-      final colorScheme = Theme.of(context).colorScheme;
-      // Wrapped in a scrollable, height-flexible container — rather than a
-      // bare Center — so this empty-state message degrades to scrolling
-      // instead of a hard overflow whenever the space available to it is
-      // small (e.g. a short viewport combined with a large text-scale
-      // factor); on any normal-sized viewport the content still fits
-      // entirely and simply renders centered, unchanged from before.
+      // [shrinkWrap] callers already place this widget inside their own
+      // scrollable, height-flexible region (see the completed-game screen),
+      // so the empty state there just sizes to its content. The default
+      // (non-shrinkWrap) caller wraps it in its own scrollable,
+      // height-flexible container — rather than a bare Center — so this
+      // empty-state message degrades to scrolling instead of a hard
+      // overflow whenever the space available to it is small (e.g. a short
+      // viewport combined with a large text-scale factor); on any
+      // normal-sized viewport the content still fits entirely and simply
+      // renders centered, unchanged from before.
+      if (widget.shrinkWrap) return _emptyState(context);
       return LayoutBuilder(
         builder: (context, constraints) => SingleChildScrollView(
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Center(
-              child: Semantics(
-                excludeSemantics: true,
-                label: 'Enter any 4-letter word to start the game.',
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.history_edu_outlined,
-                      size: 40,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Text(
-                      'Enter any 4-letter word to start the game.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            child: _emptyState(context),
           ),
         ),
       );
@@ -113,6 +133,8 @@ class _GuessHistoryState extends State<GuessHistory> {
 
     return AnimatedList(
       key: _listKey,
+      shrinkWrap: widget.shrinkWrap,
+      physics: widget.shrinkWrap ? const NeverScrollableScrollPhysics() : null,
       initialItemCount: _newestFirst.length,
       itemBuilder: (context, index, animation) {
         // Items built as part of [AnimatedListState.insertItem] get a

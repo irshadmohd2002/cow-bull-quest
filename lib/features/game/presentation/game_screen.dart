@@ -1,7 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../../core/sharing/result_share_service.dart';
+import '../../../core/sharing/share_plus_result_share_service.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_spacing.dart';
 import '../../../theme/app_status_colors.dart';
@@ -11,11 +14,23 @@ import '../controllers/game_controller_state.dart';
 import '../models/game_config.dart';
 import '../models/game_difficulty.dart';
 import '../models/game_status.dart';
+import '../services/game_result_share_formatter.dart';
 import '../services/guess_validator.dart';
 import 'widgets/game_status_panel.dart';
 import 'widgets/guess_history.dart';
 import 'widgets/guess_input.dart';
 import 'widgets/hint_section.dart';
+
+/// Formats a completed game's result into shareable text. Stateless and
+/// pure, so a single module-level instance is reused for every share/copy
+/// request rather than constructed per call.
+const GameResultShareFormatter _resultFormatter = GameResultShareFormatter();
+
+/// The snack-bar shown when [ResultShareService.shareText] throws. Never
+/// exposes the underlying error — sharing failure is not a debugging
+/// concern for the player.
+const String _shareFailureMessage =
+    "Couldn't share your result. Please try again.";
 
 /// Maps a [GuessValidationFailure] to concise, human-facing text.
 ///
@@ -63,6 +78,7 @@ class GameScreen extends StatefulWidget {
     required this.controller,
     required this.config,
     this.onButtonTap,
+    this.shareService = const SharePlusResultShareService(),
   });
 
   /// The controller for this game flow. Owned by this screen.
@@ -72,11 +88,16 @@ class GameScreen extends StatefulWidget {
   final GameConfig config;
 
   /// Called for this screen's own important navigation actions (Restart,
-  /// Return Home) so the caller can play a button-activation sound, or
-  /// `null` to play none. Deliberately generic — this screen never imports
-  /// anything audio/haptic-related itself; the app-level composition root
-  /// supplies the real behavior (see `app.dart`).
+  /// Return Home, Share Result) so the caller can play a button-activation
+  /// sound, or `null` to play none. Deliberately generic — this screen never
+  /// imports anything audio/haptic-related itself; the app-level composition
+  /// root supplies the real behavior (see `app.dart`).
   final VoidCallback? onButtonTap;
+
+  /// Opens the system share sheet for a completed game's result. Defaults to
+  /// the real, `share_plus`-backed implementation; tests substitute a fake so
+  /// no platform channel is ever touched.
+  final ResultShareService shareService;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -100,6 +121,11 @@ class _GameScreenState extends State<GameScreen> {
   /// deductions — for what the player intended as a single hint, the same
   /// pattern [_submitting] already uses for guess submission.
   bool _hintBusy = false;
+
+  /// Set the instant a share request begins and cleared once it settles.
+  /// Guards against a rapid double-tap on Share Result opening two
+  /// overlapping share sheets, the same pattern [_hintBusy] uses for hints.
+  bool _sharing = false;
 
   @override
   void initState() {
@@ -197,6 +223,58 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
+  /// Shares [state]'s result text via [GameScreen.shareService].
+  ///
+  /// `_sharing` is set synchronously, before the `await`, so a rapid
+  /// double-tap on Share Result cannot open two overlapping share sheets
+  /// (see [_sharing]'s doc comment). A thrown failure shows a friendly snack
+  /// bar and otherwise leaves the completed game, statistics, coins, and
+  /// navigation entirely untouched — this method never mutates
+  /// [GameScreen.controller]. No success message is shown merely because the
+  /// share sheet opened: this app cannot reliably know whether the player
+  /// actually completed sharing, only that the sheet was handed off or
+  /// dismissed, both of which are treated as the normal case.
+  Future<void> _handleShare(GameCompleted state, int hintsUsed) async {
+    if (_sharing) return;
+    widget.onButtonTap?.call();
+    setState(() => _sharing = true);
+    try {
+      final text = _resultFormatter.format(
+        session: state.session,
+        difficulty: widget.config.difficulty,
+        hintsUsed: hintsUsed,
+      );
+      await widget.shareService.shareText(
+        text: text,
+        subject: 'My Cow Bull Quest result',
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text(_shareFailureMessage)));
+      }
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
+  /// Copies [state]'s result text to the clipboard via Flutter's built-in
+  /// [Clipboard] API — no additional package — and shows a brief
+  /// confirmation. Shares the exact same privacy-safe text [_handleShare]
+  /// sends to the system share sheet.
+  void _handleCopy(GameCompleted state, int hintsUsed) {
+    final text = _resultFormatter.format(
+      session: state.session,
+      difficulty: widget.config.difficulty,
+      hintsUsed: hintsUsed,
+    );
+    unawaited(Clipboard.setData(ClipboardData(text: text)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Result copied.')));
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -246,8 +324,12 @@ class _GameScreenState extends State<GameScreen> {
       GameCompleted() => _CompletedGameView(
         state: state,
         hintsUsed: widget.controller.hintsUsedThisGame,
+        sharing: _sharing,
         onRestart: _handleRestart,
         onReturnHome: _handleReturnHome,
+        onShare: () =>
+            unawaited(_handleShare(state, widget.controller.hintsUsedThisGame)),
+        onCopy: () => _handleCopy(state, widget.controller.hintsUsedThisGame),
       ),
       GameStartupFailure() => _StartupFailureView(
         onRetry: _handleRetry,
@@ -457,16 +539,25 @@ class _CompletedGameView extends StatelessWidget {
   const _CompletedGameView({
     required this.state,
     required this.hintsUsed,
+    required this.sharing,
     required this.onRestart,
     required this.onReturnHome,
+    required this.onShare,
+    required this.onCopy,
   });
 
   final GameCompleted state;
 
   /// The number of hints used in the game that just ended.
   final int hintsUsed;
+
+  /// Whether a share request is currently in flight — disables Share Result
+  /// so a rapid double-tap cannot open two overlapping share sheets.
+  final bool sharing;
   final VoidCallback onRestart;
   final VoidCallback onReturnHome;
+  final VoidCallback onShare;
+  final VoidCallback onCopy;
 
   @override
   Widget build(BuildContext context) {
@@ -480,87 +571,139 @@ class _CompletedGameView extends StatelessWidget {
         : colorScheme.error;
     final outcomeIcon = won ? Icons.emoji_events : Icons.flag;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Semantics(
-          label:
-              '$outcomeText. The secret word was ${session.secretWord}. '
-              'Attempts used: ${session.attemptsUsed} of ${session.maxAttempts}. '
-              'Hints used: $hintsUsed.',
-          child: ExcludeSemantics(
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: 1),
-              duration: AppMotion.durationFor(context, AppMotion.entrance),
-              curve: AppMotion.curve,
-              builder: (context, entrance, child) => Opacity(
-                opacity: entrance,
-                child: Transform.translate(
-                  offset: Offset(0, (1 - entrance) * 12),
-                  child: child,
-                ),
-              ),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  child: Column(
-                    children: [
-                      TweenAnimationBuilder<double>(
-                        tween: Tween(begin: 0.6, end: 1),
-                        duration: AppMotion.durationFor(
-                          context,
-                          AppMotion.standard,
+    // Wrapped in a scrollable, height-flexible container — rather than a
+    // plain Column relying on Expanded(GuessHistory) alone to absorb any
+    // excess — so this whole screen degrades to scrolling instead of a hard
+    // RenderFlex overflow whenever its fixed content (the outcome card, plus
+    // the action rows below it — now three deep since Milestone 17 added
+    // Share Result/Copy Result) exceeds the available height on its own
+    // (narrow viewports, large text-scale factors). GuessHistory is passed
+    // shrinkWrap: true so it sizes to its content within this single outer
+    // scrollable, rather than nesting a second, independently-scrolling one.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Semantics(
+                label:
+                    '$outcomeText. The secret word was ${session.secretWord}. '
+                    'Attempts used: ${session.attemptsUsed} of '
+                    '${session.maxAttempts}. Hints used: $hintsUsed.',
+                child: ExcludeSemantics(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: AppMotion.durationFor(
+                      context,
+                      AppMotion.entrance,
+                    ),
+                    curve: AppMotion.curve,
+                    builder: (context, entrance, child) => Opacity(
+                      opacity: entrance,
+                      child: Transform.translate(
+                        offset: Offset(0, (1 - entrance) * 12),
+                        child: child,
+                      ),
+                    ),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpacing.lg),
+                        child: Column(
+                          children: [
+                            TweenAnimationBuilder<double>(
+                              tween: Tween(begin: 0.6, end: 1),
+                              duration: AppMotion.durationFor(
+                                context,
+                                AppMotion.standard,
+                              ),
+                              curve: Curves.easeOutBack,
+                              builder: (context, scale, child) =>
+                                  Transform.scale(scale: scale, child: child),
+                              child: Icon(
+                                outcomeIcon,
+                                size: 40,
+                                color: outcomeColor,
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            Text(
+                              outcomeText,
+                              style: Theme.of(context).textTheme.headlineSmall,
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            Text(
+                              'Secret word: ${session.secretWord.toUpperCase()}',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            Text(
+                              'Attempts used: ${session.attemptsUsed} / '
+                              '${session.maxAttempts}',
+                            ),
+                            Text('Hints used: $hintsUsed'),
+                          ],
                         ),
-                        curve: Curves.easeOutBack,
-                        builder: (context, scale, child) =>
-                            Transform.scale(scale: scale, child: child),
-                        child: Icon(outcomeIcon, size: 40, color: outcomeColor),
                       ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        outcomeText,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        'Secret word: ${session.secretWord.toUpperCase()}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Text(
-                        'Attempts used: ${session.attemptsUsed} / '
-                        '${session.maxAttempts}',
-                      ),
-                      Text('Hints used: $hintsUsed'),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
+              const SizedBox(height: AppSpacing.lg),
+              GuessHistory(guesses: session.guesses, shrinkWrap: true),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onReturnHome,
+                      icon: const Icon(Icons.home),
+                      label: const Text('Return to Home'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: onRestart,
+                      icon: const Icon(Icons.replay),
+                      label: const Text('Restart'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: sharing ? null : onShare,
+                      icon: sharing
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.share),
+                      label: const Text('Share Result'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Semantics(
+                    button: true,
+                    label: 'Copy Result',
+                    child: IconButton.outlined(
+                      onPressed: onCopy,
+                      icon: const Icon(Icons.copy),
+                      tooltip: 'Copy Result',
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: AppSpacing.lg),
-        Expanded(child: GuessHistory(guesses: session.guesses)),
-        const SizedBox(height: AppSpacing.lg),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onReturnHome,
-                icon: const Icon(Icons.home),
-                label: const Text('Return to Home'),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: onRestart,
-                icon: const Icon(Icons.replay),
-                label: const Text('Restart'),
-              ),
-            ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 }

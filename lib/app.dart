@@ -11,6 +11,8 @@ import 'core/audio/audioplayers_audio_service.dart';
 import 'core/haptics/platform_haptic_service.dart';
 import 'core/persistence/shared_preferences_store.dart';
 import 'core/privacy_policy.dart' as privacy_policy_config;
+import 'core/sharing/result_share_service.dart';
+import 'core/sharing/share_plus_result_share_service.dart';
 import 'features/game/controllers/game_controller.dart';
 import 'features/game/data/asset_word_repository.dart';
 import 'features/game/data/word_repository.dart';
@@ -178,6 +180,12 @@ class CowBullApp extends StatefulWidget {
 class _CowBullAppState extends State<CowBullApp> {
   static const GameEngine _gameEngine = GameEngine();
 
+  /// Opens the system share sheet for a completed game's result. Stateless
+  /// and holds no resources (unlike [_audioFeedback]), so a single `const`
+  /// instance is shared across every [GameScreen] this state creates rather
+  /// than owned per-game.
+  static const ResultShareService _shareService = SharePlusResultShareService();
+
   /// The settings instance actually in use — either [CowBullApp.settings]
   /// verbatim, or one freshly created here (non-persistent — see the
   /// class-level doc on [CowBullApp.settings]). Resolved once in [initState]
@@ -331,6 +339,7 @@ class _CowBullAppState extends State<CowBullApp> {
             ),
           ),
           onButtonTap: _audioFeedback.playButtonTap,
+          shareService: _shareService,
         ),
       ),
     );

@@ -19,6 +19,15 @@ class GuessHistoryTile extends StatelessWidget {
 
     final colorScheme = Theme.of(context).colorScheme;
 
+    // A plain Row, not a Material ListTile: ListTile budgets its trailing
+    // slot's size (both width and height) against its own single-line
+    // content assumptions, which two stacked score badges can exceed at
+    // large text-scale factors (a real, previously-hit RenderFlex overflow),
+    // while a wide single-line trailing Row can exceed ListTile's separate
+    // hard rule that trailing must never consume the tile's entire width on
+    // narrow screens (also previously hit). A Row here simply sizes itself
+    // to its children's natural size with no hidden budget, so it stays
+    // overflow-safe at both extremes.
     return Semantics(
       excludeSemantics: true,
       label:
@@ -27,37 +36,50 @@ class GuessHistoryTile extends StatelessWidget {
           '$cows ${cows == 1 ? 'cow' : 'cows'}',
       child: Card(
         margin: EdgeInsets.zero,
-        child: ListTile(
-          leading: CircleAvatar(
-            backgroundColor: colorScheme.primaryContainer,
-            foregroundColor: colorScheme.onPrimaryContainer,
-            child: Text('${guess.turnNumber}'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.sm,
           ),
-          title: Text(
-            guess.word.toUpperCase(),
-            style: const TextStyle(
-              fontFeatures: [FontFeature.tabularFigures()],
-              letterSpacing: 2,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
             children: [
-              _ScoreBadge(
-                icon: Icons.gps_fixed,
-                label: 'Bulls',
-                value: bulls,
-                background: colorScheme.tertiaryContainer,
-                foreground: colorScheme.onTertiaryContainer,
+              CircleAvatar(
+                backgroundColor: colorScheme.primaryContainer,
+                foregroundColor: colorScheme.onPrimaryContainer,
+                child: Text('${guess.turnNumber}'),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  guess.word.toUpperCase(),
+                  style: const TextStyle(
+                    fontFeatures: [FontFeature.tabularFigures()],
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              _ScoreBadge(
-                icon: Icons.sync_alt,
-                label: 'Cows',
-                value: cows,
-                background: colorScheme.secondaryContainer,
-                foreground: colorScheme.onSecondaryContainer,
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _ScoreBadge(
+                    icon: Icons.gps_fixed,
+                    label: 'Bulls',
+                    value: bulls,
+                    background: colorScheme.tertiaryContainer,
+                    foreground: colorScheme.onTertiaryContainer,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  _ScoreBadge(
+                    icon: Icons.sync_alt,
+                    label: 'Cows',
+                    value: cows,
+                    background: colorScheme.secondaryContainer,
+                    foreground: colorScheme.onSecondaryContainer,
+                  ),
+                ],
               ),
             ],
           ),
