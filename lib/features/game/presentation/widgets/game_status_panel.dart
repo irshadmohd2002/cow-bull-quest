@@ -125,10 +125,20 @@ class _AttemptSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      '$attemptsUsed of $maxAttempts attempts used · '
-      '$attemptsRemaining remaining',
-      style: Theme.of(context).textTheme.bodyMedium,
+    final colorScheme = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.repeat, size: 16, color: colorScheme.onSurfaceVariant),
+        const SizedBox(width: AppSpacing.xs),
+        Expanded(
+          child: Text(
+            '$attemptsUsed of $maxAttempts attempts used · '
+            '$attemptsRemaining remaining',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+      ],
     );
   }
 }

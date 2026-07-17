@@ -59,4 +59,58 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  group('Milestone 15: spend feedback', () {
+    testWidgets('shows a transient "-20" label when the balance decreases '
+        'by 20', (tester) async {
+      await tester.pumpWidget(buildSubject(100));
+      await tester.pumpWidget(buildSubject(80));
+      await tester.pump();
+
+      expect(find.text('-20'), findsOneWidget);
+    });
+
+    testWidgets('the transient label fades out and the balance stays '
+        'accurate once animations settle', (tester) async {
+      await tester.pumpWidget(buildSubject(100));
+      await tester.pumpWidget(buildSubject(80));
+      await tester.pumpAndSettle();
+
+      expect(find.text('80'), findsOneWidget);
+      final opacityFinder = find.ancestor(
+        of: find.text('-20'),
+        matching: find.byType(Opacity),
+      );
+      final opacity = tester.widget<Opacity>(opacityFinder);
+      expect(opacity.opacity, 0.0);
+    });
+
+    testWidgets('shows no transient label when the balance is unchanged '
+        'across a rebuild', (tester) async {
+      await tester.pumpWidget(buildSubject(100));
+      await tester.pumpWidget(buildSubject(100));
+      await tester.pump();
+
+      expect(find.textContaining('-'), findsNothing);
+    });
+
+    testWidgets('shows no transient label on the very first build', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject(80));
+      await tester.pump();
+
+      expect(find.textContaining('-'), findsNothing);
+    });
+
+    testWidgets('a cancelled hint (no balance change) shows no transient '
+        'label', (tester) async {
+      await tester.pumpWidget(buildSubject(100));
+      await tester.pumpWidget(buildSubject(100));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('-'), findsNothing);
+      expect(find.text('100'), findsOneWidget);
+    });
+  });
 }

@@ -60,4 +60,43 @@ void main() {
       expect(resolved, AppMotion.standard);
     });
   });
+
+  group('Milestone 15: new motion constants', () {
+    test('entrance, shake, and emphasis stay within 150-350ms', () {
+      for (final duration in [
+        AppMotion.entrance,
+        AppMotion.shake,
+        AppMotion.emphasis,
+      ]) {
+        expect(duration.inMilliseconds, greaterThanOrEqualTo(150));
+        expect(duration.inMilliseconds, lessThanOrEqualTo(350));
+      }
+    });
+
+    testWidgets('durationFor zeroes entrance/shake/emphasis when animations '
+        'are disabled', (tester) async {
+      late Duration entrance;
+      late Duration shake;
+      late Duration emphasis;
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) {
+                entrance = AppMotion.durationFor(context, AppMotion.entrance);
+                shake = AppMotion.durationFor(context, AppMotion.shake);
+                emphasis = AppMotion.durationFor(context, AppMotion.emphasis);
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      );
+
+      expect(entrance, Duration.zero);
+      expect(shake, Duration.zero);
+      expect(emphasis, Duration.zero);
+    });
+  });
 }

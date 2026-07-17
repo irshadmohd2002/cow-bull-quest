@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../theme/app_motion.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../controllers/game_controller_state.dart';
 import '../../models/revealed_hint.dart';
@@ -85,7 +86,8 @@ class HintSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final hint in revealedHints) _HintChip(hint: hint),
+          for (final hint in revealedHints)
+            _AnimatedHintChip(key: ValueKey(hint.position), hint: hint),
           if (revealedHints.isNotEmpty) const SizedBox(height: AppSpacing.xs),
           Align(
             alignment: Alignment.centerLeft,
@@ -118,6 +120,69 @@ class HintSection extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Fades and slides a single [_HintChip] into view the first time it is
+/// built, then never animates again.
+///
+/// Keyed by [RevealedHint.position] in [HintSection] so each hint position
+/// is only ever animated in once — an already-shown chip keeps its settled
+/// [State] (no replay) whenever this section rebuilds for an unrelated
+/// reason (e.g. a new guess being submitted).
+class _AnimatedHintChip extends StatefulWidget {
+  const _AnimatedHintChip({super.key, required this.hint});
+
+  final RevealedHint hint;
+
+  @override
+  State<_AnimatedHintChip> createState() => _AnimatedHintChipState();
+}
+
+class _AnimatedHintChipState extends State<_AnimatedHintChip>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: AppMotion.entrance,
+  );
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.value = 1;
+    } else {
+      _controller.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final curved = CurvedAnimation(parent: _controller, curve: AppMotion.curve);
+    return FadeTransition(
+      key: ValueKey('hint-entrance-fade-${widget.hint.position}'),
+      opacity: curved,
+      // See the identical note in guess_history.dart's _AnimatedGuessTile:
+      // without this, a screen reader would briefly skip a freshly-revealed
+      // hint while its entrance animation's opacity is still at 0.
+      alwaysIncludeSemantics: true,
+      child: SlideTransition(
+        position: Tween(
+          begin: const Offset(0, -0.15),
+          end: Offset.zero,
+        ).animate(curved),
+        child: _HintChip(hint: widget.hint),
       ),
     );
   }

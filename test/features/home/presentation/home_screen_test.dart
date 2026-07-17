@@ -358,6 +358,35 @@ void main() {
     });
   });
 
+  group('Milestone 15: difficulty icons', () {
+    testWidgets('shows a distinct icon for each difficulty', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}));
+
+      expect(find.byIcon(Icons.track_changes), findsOneWidget); // selected
+      expect(find.byIcon(Icons.eco_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.local_fire_department_outlined), findsOneWidget);
+    });
+
+    testWidgets('the selected segment shows the filled icon variant, '
+        'unselected segments show the outlined variant', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}));
+
+      // Medium is selected by default.
+      expect(find.byIcon(Icons.track_changes), findsOneWidget);
+      expect(find.byIcon(Icons.track_changes_outlined), findsNothing);
+      expect(find.byIcon(Icons.eco_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.eco), findsNothing);
+
+      await tester.tap(find.text('Hard'));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.local_fire_department), findsOneWidget);
+      expect(find.byIcon(Icons.local_fire_department_outlined), findsNothing);
+      expect(find.byIcon(Icons.track_changes_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.track_changes), findsNothing);
+    });
+  });
+
   group('branding', () {
     testWidgets('displays the approved branding icon as a runtime asset', (
       tester,

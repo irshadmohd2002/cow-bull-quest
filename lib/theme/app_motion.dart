@@ -14,6 +14,18 @@ abstract final class AppMotion {
   /// Duration for slightly larger size/layout transitions.
   static const Duration standard = Duration(milliseconds: 200);
 
+  /// Duration for a new item's fade+slide entrance (a guess-history row, a
+  /// revealed-hint chip) — long enough to read as a deliberate entrance,
+  /// short enough to never delay the next interaction.
+  static const Duration entrance = Duration(milliseconds: 250);
+
+  /// Duration for the invalid-guess input shake.
+  static const Duration shake = Duration(milliseconds: 300);
+
+  /// Duration for the coin balance's brief pulse and its transient delta
+  /// label fade-out.
+  static const Duration emphasis = Duration(milliseconds: 300);
+
   static const Curve curve = Curves.easeOut;
 
   /// Resolves [duration] against [context]'s reduced-motion preference.

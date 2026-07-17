@@ -1052,6 +1052,99 @@ void main() {
       expect(find.text('The first letter is L.'), findsOneWidget);
     });
 
+    testWidgets('Milestone 15: the win screen shows how many hints were '
+        'used', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      await tester.tap(hintIcon);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use 20 Coins'));
+      await tester.pumpAndSettle();
+
+      await enterAndSubmit(tester, 'lace');
+
+      expect(find.text('You won!'), findsOneWidget);
+      expect(find.text('Hints used: 1'), findsOneWidget);
+    });
+
+    testWidgets('Milestone 15: the loss screen shows how many hints were '
+        'used', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 10; i++) {
+        await enterAndSubmit(tester, 'mock');
+      }
+
+      expect(find.text('You lost'), findsOneWidget);
+      expect(find.text('Hints used: 0'), findsOneWidget);
+    });
+
+    testWidgets('Milestone 15: hints used resets to 0 after a restart', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      await tester.tap(hintIcon);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use 20 Coins'));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+      expect(find.text('Hints used: 1'), findsOneWidget);
+
+      await tester.tap(find.text('Restart'));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(find.text('Hints used: 0'), findsOneWidget);
+    });
+
+    testWidgets('Milestone 15: a cancelled paid-hint confirmation triggers '
+        'no coin-balance animation label', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      await tester.tap(hintIcon);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('-20'), findsNothing);
+      expect(find.text('100'), findsOneWidget);
+    });
+
     testWidgets('the hint button has an accessible label', (tester) async {
       final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
       final controller = GameController(

@@ -25,6 +25,22 @@ String _difficultyDescription(DifficultyOption option) => switch (option) {
   DifficultyOption.hard => 'Less frequent, trickier words.',
 };
 
+/// The Material icon representing [option], distinct for the selected vs.
+/// unselected state (a filled glyph when selected, an outlined one
+/// otherwise) — one of several non-color cues (alongside the segment's own
+/// selected styling and this screen's [_DifficultyDescriptionRow]) that make
+/// the current selection obvious without relying on color alone.
+IconData _difficultyIcon(DifficultyOption option, {required bool selected}) =>
+    switch (option) {
+      DifficultyOption.easy => selected ? Icons.eco : Icons.eco_outlined,
+      DifficultyOption.common =>
+        selected ? Icons.track_changes : Icons.track_changes_outlined,
+      DifficultyOption.hard =>
+        selected
+            ? Icons.local_fire_department
+            : Icons.local_fire_department_outlined,
+    };
+
 /// The app's entry screen: a brief explanation of the game, a choice of
 /// difficulty (Easy, Medium, or Hard), and entry points to starting a game,
 /// How to Play, and Settings.
@@ -153,6 +169,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         container: true,
                         label: 'Difficulty selection',
                         child: SegmentedButton<DifficultyOption>(
+                          // The default checkmark overlay would otherwise
+                          // replace each segment's own icon once selected;
+                          // this option keeps the filled/outlined icon swap
+                          // in [_difficultyIcon] itself visible instead, as
+                          // the "icon state" cue for the current selection.
+                          showSelectedIcon: false,
                           style: SegmentedButton.styleFrom(
                             padding: EdgeInsets.symmetric(
                               horizontal: segmentHorizontalPadding,
@@ -162,6 +184,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             for (final option in DifficultyOption.values)
                               ButtonSegment(
                                 value: option,
+                                icon: Icon(
+                                  _difficultyIcon(
+                                    option,
+                                    selected: option == _selectedDifficulty,
+                                  ),
+                                  size: 18,
+                                ),
                                 label: _SegmentLabel(_difficultyLabel(option)),
                               ),
                           ],
@@ -183,9 +212,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: AppSpacing.xxl),
-              FilledButton(
+              FilledButton.icon(
                 onPressed: _handleStart,
-                child: const Padding(
+                icon: const Icon(Icons.play_arrow),
+                label: const Padding(
                   padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Text('Start Game'),
                 ),
@@ -209,25 +239,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               const SizedBox(height: AppSpacing.md),
-              OutlinedButton(
+              OutlinedButton.icon(
                 onPressed: widget.onOpenRules,
-                child: const Padding(
+                icon: const Icon(Icons.menu_book),
+                label: const Padding(
                   padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Text('How to Play'),
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              TextButton(
+              TextButton.icon(
                 onPressed: widget.onOpenSettings,
-                child: const Padding(
+                icon: const Icon(Icons.settings),
+                label: const Padding(
                   padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Text('Settings'),
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              TextButton(
+              TextButton.icon(
                 onPressed: widget.onOpenStatistics,
-                child: const Padding(
+                icon: const Icon(Icons.bar_chart),
+                label: const Padding(
                   padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Text('Statistics'),
                 ),

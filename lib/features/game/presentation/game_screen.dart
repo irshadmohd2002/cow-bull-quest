@@ -229,6 +229,7 @@ class _GameScreenState extends State<GameScreen> {
       ),
       GameCompleted() => _CompletedGameView(
         state: state,
+        hintsUsed: widget.controller.hintsUsedThisGame,
         onRestart: _handleRestart,
         onReturnHome: _handleReturnHome,
       ),
@@ -359,6 +360,7 @@ class _ActiveGameView extends StatelessWidget {
           enabled: submitEnabled,
           hasError: rejection != null,
           onSubmit: onSubmit,
+          rejectionSignal: rejectionSequence,
         ),
       ],
     );
@@ -438,11 +440,15 @@ class _ValidationBanner extends StatelessWidget {
 class _CompletedGameView extends StatelessWidget {
   const _CompletedGameView({
     required this.state,
+    required this.hintsUsed,
     required this.onRestart,
     required this.onReturnHome,
   });
 
   final GameCompleted state;
+
+  /// The number of hints used in the game that just ended.
+  final int hintsUsed;
   final VoidCallback onRestart;
   final VoidCallback onReturnHome;
 
@@ -464,39 +470,53 @@ class _CompletedGameView extends StatelessWidget {
         Semantics(
           label:
               '$outcomeText. The secret word was ${session.secretWord}. '
-              'Attempts used: ${session.attemptsUsed} of ${session.maxAttempts}.',
+              'Attempts used: ${session.attemptsUsed} of ${session.maxAttempts}. '
+              'Hints used: $hintsUsed.',
           child: ExcludeSemantics(
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Column(
-                  children: [
-                    TweenAnimationBuilder<double>(
-                      tween: Tween(begin: 0.6, end: 1),
-                      duration: AppMotion.durationFor(
-                        context,
-                        AppMotion.standard,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: AppMotion.durationFor(context, AppMotion.entrance),
+              curve: AppMotion.curve,
+              builder: (context, entrance, child) => Opacity(
+                opacity: entrance,
+                child: Transform.translate(
+                  offset: Offset(0, (1 - entrance) * 12),
+                  child: child,
+                ),
+              ),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    children: [
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.6, end: 1),
+                        duration: AppMotion.durationFor(
+                          context,
+                          AppMotion.standard,
+                        ),
+                        curve: Curves.easeOutBack,
+                        builder: (context, scale, child) =>
+                            Transform.scale(scale: scale, child: child),
+                        child: Icon(outcomeIcon, size: 40, color: outcomeColor),
                       ),
-                      curve: Curves.easeOutBack,
-                      builder: (context, scale, child) =>
-                          Transform.scale(scale: scale, child: child),
-                      child: Icon(outcomeIcon, size: 40, color: outcomeColor),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Text(
-                      outcomeText,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Text(
-                      'Secret word: ${session.secretWord.toUpperCase()}',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    Text(
-                      'Attempts used: ${session.attemptsUsed} / '
-                      '${session.maxAttempts}',
-                    ),
-                  ],
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        outcomeText,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        'Secret word: ${session.secretWord.toUpperCase()}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        'Attempts used: ${session.attemptsUsed} / '
+                        '${session.maxAttempts}',
+                      ),
+                      Text('Hints used: $hintsUsed'),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -508,16 +528,18 @@ class _CompletedGameView extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: OutlinedButton(
+              child: OutlinedButton.icon(
                 onPressed: onReturnHome,
-                child: const Text('Return to Home'),
+                icon: const Icon(Icons.home),
+                label: const Text('Return to Home'),
               ),
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
-              child: FilledButton(
+              child: FilledButton.icon(
                 onPressed: onRestart,
-                child: const Text('Restart'),
+                icon: const Icon(Icons.replay),
+                label: const Text('Restart'),
               ),
             ),
           ],
@@ -553,12 +575,17 @@ class _StartupFailureView extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              OutlinedButton(
+              OutlinedButton.icon(
                 onPressed: onReturnHome,
-                child: const Text('Return to Home'),
+                icon: const Icon(Icons.home),
+                label: const Text('Return to Home'),
               ),
               const SizedBox(width: AppSpacing.md),
-              FilledButton(onPressed: onRetry, child: const Text('Retry')),
+              FilledButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
             ],
           ),
         ],

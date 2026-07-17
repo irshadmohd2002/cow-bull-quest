@@ -269,6 +269,58 @@ void main() {
       expect(find.byIcon(Icons.lightbulb), findsNothing);
     });
 
+    testWidgets('Milestone 15: a newly revealed hint chip fades in', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        buildSubject(
+          availability: const HintAvailability(
+            canRequestHint: true,
+            hintsUsed: 1,
+            maxHints: 2,
+            nextHintCost: 20,
+          ),
+          revealedHints: const [RevealedHint(position: 0, letter: 'l')],
+        ),
+      );
+      await tester.pump();
+
+      final fadeFinder = find.byKey(const ValueKey('hint-entrance-fade-0'));
+      final fade = tester.widget<FadeTransition>(fadeFinder);
+      expect(fade.opacity.value, lessThan(1.0));
+
+      await tester.pumpAndSettle();
+      final settled = tester.widget<FadeTransition>(fadeFinder);
+      expect(settled.opacity.value, 1.0);
+    });
+
+    testWidgets(
+      'Milestone 15: a hint chip appears at full opacity immediately when '
+      'animations are disabled',
+      (tester) async {
+        await tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(disableAnimations: true),
+            child: buildSubject(
+              availability: const HintAvailability(
+                canRequestHint: true,
+                hintsUsed: 1,
+                maxHints: 2,
+                nextHintCost: 20,
+              ),
+              revealedHints: const [RevealedHint(position: 0, letter: 'l')],
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final fade = tester.widget<FadeTransition>(
+          find.byKey(const ValueKey('hint-entrance-fade-0')),
+        );
+        expect(fade.opacity.value, 1.0);
+      },
+    );
+
     testWidgets('has an accessible "Hint:" label distinct from the visible '
         'text', (tester) async {
       await tester.pumpWidget(

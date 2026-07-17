@@ -73,6 +73,13 @@ class GameController extends ChangeNotifier {
   /// spending only ever happens through [useHint].
   CoinWallet get coinWallet => _coinWallet;
 
+  /// The number of hints used in the current (or, once completed, the most
+  /// recently finished) game. Backed by [_hintState], which is only ever
+  /// reset by the next [startGame] call — never on completion — so this
+  /// still reflects the right count for a [GameCompleted] result screen
+  /// showing how many hints that just-finished game used.
+  int get hintsUsedThisGame => _hintState.hintsUsed;
+
   /// Every hint revealed so far in the current game. Reset to
   /// [HintState.initial] every time [startGame] runs (including via
   /// [restart]) — hint usage never carries over between games, and a
