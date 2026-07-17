@@ -1,11 +1,15 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../coin_wallet.dart';
 import '../data/word_repository.dart';
 import '../models/game_config.dart';
 import '../models/game_session.dart';
 import '../models/game_status.dart';
+import '../models/hint_state.dart';
 import '../services/completion_id_generator.dart';
 import '../services/game_engine.dart';
+import '../services/hint_policy.dart';
+import '../services/hint_service.dart';
 import 'game_controller_state.dart';
 
 /// Coordinates a [WordRepository] and a [GameEngine] into the UI-ready
@@ -23,11 +27,18 @@ class GameController extends ChangeNotifier {
   GameController({
     required WordRepository wordRepository,
     required GameEngine gameEngine,
+    CoinWallet? coinWallet,
+    HintService hintService = const HintService(),
+    HintPolicy hintPolicy = const HintPolicy(),
     CompletionIdGenerator completionIdGenerator =
         const SecureRandomCompletionIdGenerator(),
     void Function(String completionId, GameSession session)? onGameCompleted,
   }) : _wordRepository = wordRepository, // ignore: prefer_initializing_formals
        _gameEngine = gameEngine, // ignore: prefer_initializing_formals
+       _coinWallet = coinWallet ?? CoinWallet(),
+       _ownsCoinWallet = coinWallet == null,
+       _hintService = hintService, // ignore: prefer_initializing_formals
+       _hintPolicy = hintPolicy, // ignore: prefer_initializing_formals
        // ignore: prefer_initializing_formals
        _completionIdGenerator = completionIdGenerator,
        // ignore: prefer_initializing_formals
@@ -36,6 +47,38 @@ class GameController extends ChangeNotifier {
   final WordRepository _wordRepository;
   final GameEngine _gameEngine;
   final CompletionIdGenerator _completionIdGenerator;
+
+  /// The coin wallet hint purchases spend from. Defaults to a fresh,
+  /// non-persistent, 100-coin [CoinWallet] when not injected — the same
+  /// fallback pattern `CowBullApp.settings` uses — so existing callers and
+  /// tests that don't care about coins/hints are unaffected. The real,
+  /// shipped app always injects the single app-wide wallet Home also
+  /// displays (see `app.dart`), so hint spending and the displayed balance
+  /// stay in sync.
+  final CoinWallet _coinWallet;
+
+  /// Whether this controller created [_coinWallet] itself and therefore
+  /// must dispose it. `false` when a wallet was injected — the caller
+  /// retains ownership of an injected instance, exactly like
+  /// `CowBullApp._ownsSettings`.
+  final bool _ownsCoinWallet;
+
+  final HintService _hintService;
+  final HintPolicy _hintPolicy;
+
+  /// The read-only coin wallet backing this controller's hints. Exposed so
+  /// presentation code (the gameplay screen) can display/observe the
+  /// current balance and decide whether a paid hint is affordable, without
+  /// a second, separately-injected reference to the same instance. Actual
+  /// spending only ever happens through [useHint].
+  CoinWallet get coinWallet => _coinWallet;
+
+  /// Every hint revealed so far in the current game. Reset to
+  /// [HintState.initial] every time [startGame] runs (including via
+  /// [restart]) — hint usage never carries over between games, and a
+  /// restarted game never refunds coins already spent on hints in the
+  /// previous attempt.
+  HintState _hintState = HintState.initial;
 
   /// Called exactly once per game, at the moment its session transitions
   /// from in-progress to won or lost — never on a widget rebuild, never for
@@ -118,6 +161,7 @@ class GameController extends ChangeNotifier {
     _session = null;
     _allowedGuesses = null;
     _activeCompletionId = null;
+    _hintState = HintState.initial;
     _setState(GameLoading(config));
 
     try {
@@ -143,7 +187,12 @@ class GameController extends ChangeNotifier {
       // the generation/disposal guard above, so neither a stale nor a
       // post-disposal completion can assign — or reassign — this.
       _activeCompletionId = _completionIdGenerator.generate();
-      _setState(GameActive(view: GameSessionView.fromSession(session)));
+      _setState(
+        GameActive(
+          view: GameSessionView.fromSession(session),
+          hintState: _hintState,
+        ),
+      );
     } catch (error, stackTrace) {
       if (_disposed || generation != _requestGeneration) return;
       _setState(
@@ -197,7 +246,12 @@ class GameController extends ChangeNotifier {
       case GuessAccepted():
         final updated = submission.session;
         if (updated.status == GameStatus.inProgress) {
-          _setState(GameActive(view: GameSessionView.fromSession(updated)));
+          _setState(
+            GameActive(
+              view: GameSessionView.fromSession(updated),
+              hintState: _hintState,
+            ),
+          );
         } else {
           _setState(GameCompleted(updated));
           final completionId = _activeCompletionId;
@@ -210,9 +264,105 @@ class GameController extends ChangeNotifier {
           GameActive(
             view: GameSessionView.fromSession(submission.session),
             lastRejection: submission.reason,
+            hintState: _hintState,
           ),
         );
     }
+  }
+
+  /// Hint availability and pricing for the current game; `null` whenever no
+  /// game is active (idle, loading, completed, or a failed startup) — hints
+  /// are only ever available during [GameActive]. See [HintAvailability]
+  /// for exactly what each field means.
+  HintAvailability? get hintAvailability {
+    final session = _session;
+    final config = _currentConfig;
+    if (_state is! GameActive || session == null || config == null) {
+      return null;
+    }
+
+    final maxHints = _hintPolicy.maxHints(config.difficulty);
+    final hintsUsed = _hintState.hintsUsed;
+    if (hintsUsed >= maxHints) {
+      return HintAvailability(
+        canRequestHint: false,
+        hintsUsed: hintsUsed,
+        maxHints: maxHints,
+        nextHintCost: 0,
+      );
+    }
+
+    final computation = _hintService.computeHint(
+      secretWord: session.secretWord,
+      guesses: session.guesses,
+      previousHints: _hintState.revealedHints,
+    );
+    return HintAvailability(
+      canRequestHint: computation is HintComputed,
+      hintsUsed: hintsUsed,
+      maxHints: maxHints,
+      nextHintCost: _hintPolicy.costFor(config.difficulty, hintsUsed),
+    );
+  }
+
+  /// Attempts to reveal the next hint for the current game, spending coins
+  /// from [coinWallet] if this hint is paid.
+  ///
+  /// Independently re-validates every eligibility rule itself — game
+  /// active, hint limit not reached, a useful hint still exists, and (for a
+  /// paid hint) sufficient coin balance — rather than trusting a caller's
+  /// possibly-stale [hintAvailability] read, since UI-observed state can go
+  /// stale between a button tap and this call actually running. Coins are
+  /// deducted only after a useful hint has actually been computed, and only
+  /// if that deduction succeeds; every failure path below returns
+  /// [HintNotRevealed] without charging anything or mutating [state].
+  ///
+  /// This entire method runs synchronously with no `await` — the hint
+  /// computation, the wallet check-and-deduct, and the resulting state
+  /// update all happen within one call — so two calls made back-to-back can
+  /// never both charge for what should be a single hint: the first call's
+  /// effects (an incremented hint count, and — for a paid hint — a reduced
+  /// wallet balance) are already visible to the second by the time it runs.
+  HintOutcome useHint() {
+    if (_disposed || _state is! GameActive) {
+      return const HintNotRevealed(HintUnavailableReason.gameNotActive);
+    }
+    final session = _session;
+    final config = _currentConfig;
+    if (session == null || config == null) {
+      return const HintNotRevealed(HintUnavailableReason.gameNotActive);
+    }
+
+    final maxHints = _hintPolicy.maxHints(config.difficulty);
+    final hintsUsed = _hintState.hintsUsed;
+    if (hintsUsed >= maxHints) {
+      return const HintNotRevealed(HintUnavailableReason.limitReached);
+    }
+
+    final computation = _hintService.computeHint(
+      secretWord: session.secretWord,
+      guesses: session.guesses,
+      previousHints: _hintState.revealedHints,
+    );
+    if (computation is! HintComputed) {
+      return const HintNotRevealed(HintUnavailableReason.noUsefulHintRemains);
+    }
+
+    final cost = _hintPolicy.costFor(config.difficulty, hintsUsed);
+    if (cost > 0 && !_coinWallet.spend(cost)) {
+      return const HintNotRevealed(HintUnavailableReason.insufficientCoins);
+    }
+
+    _hintState = _hintState.withHint(computation.hint);
+    final current = _state as GameActive;
+    _setState(
+      GameActive(
+        view: current.view,
+        lastRejection: current.lastRejection,
+        hintState: _hintState,
+      ),
+    );
+    return HintRevealed(hint: computation.hint, coinsSpent: cost);
   }
 
   @override
@@ -221,6 +371,7 @@ class GameController extends ChangeNotifier {
     // Invalidates every in-flight startGame call's captured generation, in
     // addition to the explicit _disposed check each of them also performs.
     _requestGeneration++;
+    if (_ownsCoinWallet) _coinWallet.dispose();
     super.dispose();
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cowbullgame/coin_wallet.dart';
 import 'package:cowbullgame/features/game/controllers/game_controller.dart';
 import 'package:cowbullgame/features/game/controllers/game_controller_state.dart';
 import 'package:cowbullgame/features/game/data/word_repository.dart';
@@ -7,6 +8,7 @@ import 'package:cowbullgame/features/game/models/game_config.dart';
 import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:cowbullgame/features/game/models/game_session.dart';
 import 'package:cowbullgame/features/game/models/game_status.dart';
+import 'package:cowbullgame/features/game/models/revealed_hint.dart';
 import 'package:cowbullgame/features/game/services/game_engine.dart';
 import 'package:cowbullgame/features/game/services/guess_validator.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1269,6 +1271,518 @@ void main() {
 
       final completed = controller.state as GameCompleted;
       expect(() => completed.session.guesses.clear(), throwsUnsupportedError);
+    });
+  });
+
+  group('GameController hint availability', () {
+    test('is null when no game is active', () {
+      final controller = GameController(
+        wordRepository: _FakeWordRepository(),
+        gameEngine: engine,
+      );
+      expect(controller.hintAvailability, isNull);
+    });
+
+    test('Easy allows exactly one hint costing 20 coins', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.easy),
+      );
+
+      final availability = controller.hintAvailability!;
+      expect(availability.canRequestHint, isTrue);
+      expect(availability.maxHints, 1);
+      expect(availability.hintsUsed, 0);
+      expect(availability.nextHintCost, 20);
+    });
+
+    test('Medium allows exactly one hint costing 20 coins', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(
+          wordLength: 4,
+          difficulty: GameDifficulty.common,
+        ),
+      );
+
+      final availability = controller.hintAvailability!;
+      expect(availability.maxHints, 1);
+      expect(availability.nextHintCost, 20);
+    });
+
+    test('Hard allows two hints; the first is free', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.hard),
+      );
+
+      final availability = controller.hintAvailability!;
+      expect(availability.maxHints, 2);
+      expect(availability.nextHintCost, 0);
+    });
+
+    test('is null once the game is won', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(config4);
+      controller.submitGuess('lace');
+
+      expect(controller.hintAvailability, isNull);
+    });
+  });
+
+  group('GameController.useHint on Easy/Medium', () {
+    test('a successful hint deducts exactly 20 coins and reveals the '
+        'lowest unrevealed position', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.easy),
+      );
+
+      final outcome = controller.useHint();
+
+      expect(outcome, isA<HintRevealed>());
+      final revealed = outcome as HintRevealed;
+      expect(revealed.coinsSpent, 20);
+      expect(revealed.hint, const RevealedHint(position: 0, letter: 'l'));
+      expect(wallet.balance, 80);
+    });
+
+    test('a second hint is blocked without deduction once the one-hint '
+        'limit is reached', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(
+          wordLength: 4,
+          difficulty: GameDifficulty.common,
+        ),
+      );
+
+      controller.useHint();
+      final second = controller.useHint();
+
+      expect(second, isA<HintNotRevealed>());
+      expect(
+        (second as HintNotRevealed).reason,
+        HintUnavailableReason.limitReached,
+      );
+      expect(wallet.balance, 80);
+    });
+
+    test('an insufficient balance blocks the hint without deducting '
+        'anything', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final wallet = CoinWallet(initialBalance: 10);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.easy),
+      );
+
+      final outcome = controller.useHint();
+
+      expect(outcome, isA<HintNotRevealed>());
+      expect(
+        (outcome as HintNotRevealed).reason,
+        HintUnavailableReason.insufficientCoins,
+      );
+      expect(wallet.balance, 10);
+    });
+  });
+
+  group('GameController.useHint on Hard', () {
+    test('the first hint is free and does not deduct coins', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.hard),
+      );
+
+      final outcome = controller.useHint();
+
+      expect(outcome, isA<HintRevealed>());
+      expect((outcome as HintRevealed).coinsSpent, 0);
+      expect(wallet.balance, 100);
+    });
+
+    test('the second hint costs 20 coins and deducts them', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.hard),
+      );
+
+      controller.useHint(); // free
+      final second = controller.useHint();
+
+      expect(second, isA<HintRevealed>());
+      expect((second as HintRevealed).coinsSpent, 20);
+      expect(wallet.balance, 80);
+    });
+
+    test('a third hint is blocked without deduction', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.hard),
+      );
+
+      controller.useHint();
+      controller.useHint();
+      final third = controller.useHint();
+
+      expect(third, isA<HintNotRevealed>());
+      expect(
+        (third as HintNotRevealed).reason,
+        HintUnavailableReason.limitReached,
+      );
+      expect(wallet.balance, 80);
+    });
+  });
+
+  group('GameController hint correctness', () {
+    test(
+      'a known Bull position from an accepted guess is not selected',
+      () async {
+        final repo = _FakeWordRepository()
+          ..registerWordForAllDifficulties(4, 'lace');
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+        await controller.startGame(
+          GameConfig.forSelection(
+            wordLength: 4,
+            difficulty: GameDifficulty.hard,
+          ),
+        );
+
+        // 'race' scores 3 bulls against 'lace' (positions 1, 2, 3) — only
+        // position 0 remains unknown, so the hint must reveal that one.
+        controller.submitGuess('race');
+        final outcome = controller.useHint() as HintRevealed;
+
+        expect(outcome.hint, const RevealedHint(position: 0, letter: 'l'));
+      },
+    );
+
+    test(
+      'a previously hinted position is not repeated by a later hint',
+      () async {
+        final repo = _FakeWordRepository()
+          ..registerWordForAllDifficulties(4, 'lace');
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+        await controller.startGame(
+          GameConfig.forSelection(
+            wordLength: 4,
+            difficulty: GameDifficulty.hard,
+          ),
+        );
+
+        final first = controller.useHint() as HintRevealed;
+        final second = controller.useHint() as HintRevealed;
+
+        expect(second.hint.position, isNot(first.hint.position));
+      },
+    );
+
+    test('a hint does not change the attempt count or guess history', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.hard),
+      );
+
+      controller.useHint();
+
+      final active = controller.state as GameActive;
+      expect(active.view.attemptsUsed, 0);
+      expect(active.view.guesses, isEmpty);
+    });
+
+    test('no deduction occurs when no useful hint is available', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.hard),
+      );
+
+      controller.useHint(); // free hint reveals position 0
+      // 'race' scores 3 bulls (positions 1, 2, 3) — every position is now
+      // known, even though Hard's hint limit (2) has not been reached.
+      controller.submitGuess('race');
+      final outcome = controller.useHint();
+
+      expect(outcome, isA<HintNotRevealed>());
+      expect(
+        (outcome as HintNotRevealed).reason,
+        HintUnavailableReason.noUsefulHintRemains,
+      );
+      expect(wallet.balance, 100);
+    });
+
+    test('hints are unavailable after a win', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.hard),
+      );
+      controller.submitGuess('lace');
+
+      final outcome = controller.useHint();
+
+      expect(outcome, isA<HintNotRevealed>());
+      expect(
+        (outcome as HintNotRevealed).reason,
+        HintUnavailableReason.gameNotActive,
+      );
+      expect(wallet.balance, 100);
+    });
+
+    test('hints are unavailable after a loss', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.hard),
+      );
+      for (var i = 0; i < 9; i++) {
+        controller.submitGuess('race');
+      }
+      controller.submitGuess('mace');
+      expect(controller.state, isA<GameCompleted>());
+
+      final outcome = controller.useHint();
+
+      expect(outcome, isA<HintNotRevealed>());
+      expect(
+        (outcome as HintNotRevealed).reason,
+        HintUnavailableReason.gameNotActive,
+      );
+      expect(wallet.balance, 100);
+    });
+
+    test('rapid repeated calls cannot deduct twice on a single-hint '
+        'difficulty', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.easy),
+      );
+
+      controller.useHint();
+      controller.useHint();
+      controller.useHint();
+
+      expect(wallet.balance, 80);
+    });
+
+    test('rapid repeated calls beyond Hard\'s two-hint limit deduct at '
+        'most once', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+      await controller.startGame(
+        GameConfig.forSelection(wordLength: 4, difficulty: GameDifficulty.hard),
+      );
+
+      controller.useHint();
+      controller.useHint();
+      controller.useHint();
+      controller.useHint();
+
+      expect(wallet.balance, 80);
+    });
+  });
+
+  group('GameController hint state lifecycle', () {
+    test('hint usage resets when starting a new game', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      final easyConfig = GameConfig.forSelection(
+        wordLength: 4,
+        difficulty: GameDifficulty.easy,
+      );
+      await controller.startGame(easyConfig);
+      controller.useHint();
+      expect(controller.hintAvailability!.hintsUsed, 1);
+
+      await controller.startGame(easyConfig);
+
+      expect(controller.hintAvailability!.hintsUsed, 0);
+    });
+
+    test('restart creates a fresh game with fresh hint limits but does not '
+        'refund coins already spent', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+      final hardConfig = GameConfig.forSelection(
+        wordLength: 4,
+        difficulty: GameDifficulty.hard,
+      );
+      await controller.startGame(hardConfig);
+      controller.useHint(); // free
+      controller.useHint(); // paid, 20 coins
+      expect(wallet.balance, 80);
+
+      await controller.restart();
+
+      expect(controller.hintAvailability!.hintsUsed, 0);
+      expect(wallet.balance, 80);
+    });
+  });
+
+  group('GameController coin wallet ownership', () {
+    test('exposes the injected wallet via the coinWallet getter', () {
+      final wallet = CoinWallet(initialBalance: 55);
+      final controller = GameController(
+        wordRepository: _FakeWordRepository(),
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+
+      expect(identical(controller.coinWallet, wallet), isTrue);
+    });
+
+    test('creates its own fallback wallet with the starting balance when '
+        'none is injected', () {
+      final controller = GameController(
+        wordRepository: _FakeWordRepository(),
+        gameEngine: engine,
+      );
+
+      expect(controller.coinWallet.balance, startingCoinBalance);
+    });
+
+    test('does not dispose an externally-injected wallet', () async {
+      final wallet = CoinWallet(initialBalance: 100);
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+      await controller.startGame(config4);
+
+      controller.dispose();
+
+      expect(wallet.spend(10), isTrue);
+    });
+
+    test('disposes its own fallback wallet on dispose', () async {
+      final repo = _FakeWordRepository()
+        ..registerWordForAllDifficulties(4, 'lace');
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await controller.startGame(config4);
+      final wallet = controller.coinWallet;
+
+      controller.dispose();
+
+      expect(wallet.spend(10), isFalse);
     });
   });
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/difficulty_selection.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_spacing.dart';
+import '../../../widgets/coin_balance_badge.dart';
 
 /// Concise, human-facing label for [option]. Presentation-layer concern —
 /// [DifficultyOption] itself carries no human-facing text. The internal
@@ -48,6 +49,7 @@ class HomeScreen extends StatefulWidget {
     required this.onOpenRules,
     required this.onOpenSettings,
     required this.onOpenStatistics,
+    required this.coinBalance,
   });
 
   /// Called with the chosen difficulty when the player starts a game. Every
@@ -66,6 +68,13 @@ class HomeScreen extends StatefulWidget {
   /// the app-level composition root owns navigating there and supplying it
   /// with a `StatisticsController`.
   final VoidCallback onOpenStatistics;
+
+  /// The player's current coin balance, shown compactly in the app bar.
+  /// Passed as a plain `int` — like every other value this screen receives
+  /// — rather than a `CoinWallet` reference, so this screen stays purely
+  /// presentational; the app-level composition root owns listening to the
+  /// wallet and rebuilding this screen when it changes.
+  final int coinBalance;
 
   /// The difficulty preselected when Home first appears. `common` — the
   /// broadest, middle-of-the-road pool — is the least surprising default
@@ -95,7 +104,15 @@ class _HomeScreenState extends State<HomeScreen> {
         : AppSpacing.sm;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Cow Bull Quest')),
+      appBar: AppBar(
+        title: const Text('Cow Bull Quest'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.md),
+            child: Center(child: CoinBalanceBadge(balance: widget.coinBalance)),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.screenPadding),

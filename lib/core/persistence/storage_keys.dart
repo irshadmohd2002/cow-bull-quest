@@ -9,4 +9,7 @@ abstract final class StorageKeys {
   /// The persisted, versioned statistics JSON document (see
   /// `features/statistics/data/statistics_repository.dart`).
   static const String statistics = 'statistics';
+
+  /// The persisted coin balance string value (see `coin_wallet.dart`).
+  static const String coinBalance = 'coin_balance';
 }

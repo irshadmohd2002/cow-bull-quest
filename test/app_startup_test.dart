@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cowbullgame/app_bootstrap.dart';
 import 'package:cowbullgame/app_settings.dart';
 import 'package:cowbullgame/app_startup.dart';
+import 'package:cowbullgame/coin_wallet.dart';
 import 'package:cowbullgame/core/persistence/storage_keys.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -12,6 +13,7 @@ import 'support/fake_statistics_repository.dart';
 Future<AppBootstrap> _succeedingLoader() async => AppBootstrap(
   settings: AppSettings(),
   statisticsRepository: FakeStatisticsRepository(),
+  coinWallet: CoinWallet(),
 );
 
 void main() {
@@ -139,6 +141,7 @@ void main() {
         initialValues: {
           StorageKeys.themePreference: 'dark',
           StorageKeys.statistics: '{"whatever":true}',
+          StorageKeys.coinBalance: '80',
           'unrelated_key': 'keep-me',
         },
       );
@@ -159,18 +162,22 @@ void main() {
 
       expect(store.values[StorageKeys.themePreference], 'dark');
       expect(store.values[StorageKeys.statistics], '{"whatever":true}');
+      // Cancelling this explicit full-data-reset dialog must not touch the
+      // coin balance either — it stays untouched, same as every other key.
+      expect(store.values[StorageKeys.coinBalance], '80');
       expect(store.values['unrelated_key'], 'keep-me');
       expect(find.text("Cow Bull Quest couldn't start"), findsOneWidget);
     });
 
     testWidgets(
-      'confirming reset clears exactly the theme and statistics keys, '
-      'leaves other keys untouched, and retries',
+      'confirming reset clears exactly the theme, statistics, and coin '
+      'balance keys, leaves other keys untouched, and retries',
       (tester) async {
         final store = FakePreferencesStore(
           initialValues: {
             StorageKeys.themePreference: 'dark',
             StorageKeys.statistics: '{"whatever":true}',
+            StorageKeys.coinBalance: '80',
             'unrelated_key': 'keep-me',
           },
         );
@@ -194,6 +201,10 @@ void main() {
 
         expect(store.values.containsKey(StorageKeys.themePreference), isFalse);
         expect(store.values.containsKey(StorageKeys.statistics), isFalse);
+        // This IS the explicit full-data-reset action, so — unlike a plain
+        // theme change — it is expected/correct for it to also clear
+        // earned/remaining coins.
+        expect(store.values.containsKey(StorageKeys.coinBalance), isFalse);
         expect(store.values['unrelated_key'], 'keep-me');
         // The initial load plus one retry triggered by the confirmed reset.
         expect(callCount, 2);

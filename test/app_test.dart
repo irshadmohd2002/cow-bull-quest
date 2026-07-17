@@ -1100,4 +1100,74 @@ void main() {
       },
     );
   });
+
+  group('Milestone 14: coin wallet composition', () {
+    testWidgets('Home shows the starting coin balance', (tester) async {
+      await tester.pumpWidget(
+        CowBullApp(wordRepository: _FakeWordRepository()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('100'), findsOneWidget);
+    });
+
+    testWidgets('the Game screen shows the same coin balance as Home', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      await tester.pumpWidget(CowBullApp(wordRepository: repo));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('100'), findsOneWidget);
+    });
+
+    testWidgets('spending on a hint during a game is reflected on Home after '
+        'returning', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      await tester.pumpWidget(CowBullApp(wordRepository: repo));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.lightbulb_outline));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use 20 Coins'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('80'), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Start Game'), findsOneWidget);
+      expect(find.text('80'), findsOneWidget);
+    });
+
+    testWidgets('changing the theme preference in Settings — a normal settings '
+        'action, not a full data reset — never touches the coin balance', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        CowBullApp(wordRepository: _FakeWordRepository()),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('100'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Settings'));
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Dark'));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.text('100'), findsOneWidget);
+    });
+  });
 }

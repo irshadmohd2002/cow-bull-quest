@@ -167,4 +167,68 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('How to Play'), findsWidgets);
   });
+
+  group('Milestone 14: coins and hints explanation', () {
+    testWidgets('shows the Coins & Hints section heading', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.text('Coins & Hints'), findsOneWidget);
+    });
+
+    testWidgets('states new players begin with 100 coins', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.textContaining('begin with 100 coins'), findsOneWidget);
+    });
+
+    testWidgets('explains a hint reveals one letter and its position', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject());
+      expect(
+        find.textContaining(
+          'reveals one correct letter and its exact '
+          'position',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('explains Easy and Medium allow one paid hint costing 20 '
+        'coins', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.text('Easy and Medium hints'), findsOneWidget);
+      expect(
+        find.textContaining('One hint per game, costing 20 coins'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('explains Hard allows one free hint and one paid hint', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.text('Hard hints'), findsOneWidget);
+      expect(
+        find.textContaining('the first is free, the second costs 20 coins'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('states hints do not use up an attempt', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.textContaining('never uses up an attempt'), findsOneWidget);
+    });
+
+    testWidgets('states coins are stored only on this device', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.textContaining('stored only on this device'), findsOneWidget);
+    });
+
+    testWidgets('never mentions cash, money, or real-world redemption', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.textContaining('cash'), findsNothing);
+      expect(find.textContaining('real money'), findsNothing);
+    });
+  });
 }

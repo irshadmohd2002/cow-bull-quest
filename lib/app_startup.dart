@@ -128,8 +128,8 @@ class _AppStartupState extends State<AppStartup> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Reset local data?'),
         content: const Text(
-          'This clears your theme preference and statistics history so '
-          'the app can start fresh. This cannot be undone.',
+          'This clears your theme preference, statistics history, and coin '
+          'balance so the app can start fresh. This cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -169,6 +169,7 @@ class _AppStartupState extends State<AppStartup> {
       _StartupReady(:final bootstrap) => CowBullApp(
         settings: bootstrap.settings,
         statisticsRepository: bootstrap.statisticsRepository,
+        coinWallet: bootstrap.coinWallet,
       ),
     };
   }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher_pkg;
 
 import 'app_settings.dart';
+import 'coin_wallet.dart';
 import 'core/persistence/shared_preferences_store.dart';
 import 'core/privacy_policy.dart' as privacy_policy_config;
 import 'features/game/controllers/game_controller.dart';
@@ -98,6 +99,7 @@ class CowBullApp extends StatefulWidget {
     WordRepository? wordRepository,
     this.settings,
     StatisticsRepository? statisticsRepository,
+    this.coinWallet,
     String? privacyPolicyUrl,
     UrlLauncher? urlLauncher,
   }) : wordRepository = wordRepository ?? AssetWordRepository(),
@@ -124,6 +126,15 @@ class CowBullApp extends StatefulWidget {
   /// defaults to a real, persistence-capable repository even when not
   /// injected.
   final StatisticsRepository statisticsRepository;
+
+  /// An externally-owned coin wallet, or `null` to let this widget create
+  /// its own **non-persistent, in-memory only** fallback — the exact same
+  /// fallback semantics as [settings] (see its doc above). When non-null,
+  /// the caller retains ownership: this widget uses the exact instance
+  /// given but never disposes it. The real, persistent app entry point
+  /// always injects an `AppBootstrap`-loaded wallet, exactly as it does for
+  /// [settings].
+  final CoinWallet? coinWallet;
 
   /// The privacy-policy URL Settings' "Privacy Policy" item opens, or
   /// `null` to use the app's single, centrally-configured
@@ -158,6 +169,19 @@ class _CowBullAppState extends State<CowBullApp> {
   /// instance the caller retains ownership of.
   late final bool _ownsSettings;
 
+  /// The coin wallet instance actually in use — either [CowBullApp.coinWallet]
+  /// verbatim, or one freshly created here (non-persistent — see the
+  /// class-level doc on [CowBullApp.coinWallet]). Resolved once in
+  /// [initState], mirroring [_settings]: shared by [HomeScreen]'s balance
+  /// display and every [GameController] this state creates when starting a
+  /// game, so hint spending and the displayed balance always agree.
+  late final CoinWallet _coinWallet;
+
+  /// Whether this state created [_coinWallet] itself and therefore must
+  /// dispose it. `false` when [_coinWallet] is an externally-injected
+  /// instance the caller retains ownership of.
+  late final bool _ownsCoinWallet;
+
   /// The single [StatisticsController] for the app's lifetime, wrapping
   /// [CowBullApp.statisticsRepository]. Always created and disposed by this
   /// state — unlike [_settings], there is no externally-injected seam for
@@ -176,6 +200,14 @@ class _CowBullAppState extends State<CowBullApp> {
       _settings = AppSettings();
       _ownsSettings = true;
     }
+    final injectedWallet = widget.coinWallet;
+    if (injectedWallet != null) {
+      _coinWallet = injectedWallet;
+      _ownsCoinWallet = false;
+    } else {
+      _coinWallet = CoinWallet();
+      _ownsCoinWallet = true;
+    }
     _statisticsController = StatisticsController(
       repository: widget.statisticsRepository,
     );
@@ -184,6 +216,7 @@ class _CowBullAppState extends State<CowBullApp> {
   @override
   void dispose() {
     if (_ownsSettings) _settings.dispose();
+    if (_ownsCoinWallet) _coinWallet.dispose();
     _statisticsController.dispose();
     super.dispose();
   }
@@ -220,6 +253,7 @@ class _CowBullAppState extends State<CowBullApp> {
           controller: GameController(
             wordRepository: widget.wordRepository,
             gameEngine: _gameEngine,
+            coinWallet: _coinWallet,
             onGameCompleted: (completionId, session) => _recordCompletedGame(
               id: completionId,
               config: config,
@@ -376,11 +410,15 @@ class _CowBullAppState extends State<CowBullApp> {
         darkTheme: AppTheme.dark,
         themeMode: _settings.themeMode,
         home: Builder(
-          builder: (context) => HomeScreen(
-            onStartGame: (difficulty) => _startGame(context, difficulty),
-            onOpenRules: () => _openRules(context),
-            onOpenSettings: () => _openSettings(context),
-            onOpenStatistics: () => _openStatistics(context),
+          builder: (context) => ListenableBuilder(
+            listenable: _coinWallet,
+            builder: (context, _) => HomeScreen(
+              onStartGame: (difficulty) => _startGame(context, difficulty),
+              onOpenRules: () => _openRules(context),
+              onOpenSettings: () => _openSettings(context),
+              onOpenStatistics: () => _openStatistics(context),
+              coinBalance: _coinWallet.balance,
+            ),
           ),
         ),
       ),

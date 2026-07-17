@@ -4,6 +4,8 @@ import '../models/game_config.dart';
 import '../models/game_session.dart';
 import '../models/game_status.dart';
 import '../models/guess.dart';
+import '../models/hint_state.dart';
+import '../models/revealed_hint.dart';
 import '../services/guess_validator.dart';
 
 /// A presentation-safe projection of an in-progress [GameSession].
@@ -79,13 +81,19 @@ final class GameLoading extends GameControllerState {
 /// A game is in progress. [view] never exposes the secret word; [lastRejection]
 /// carries the typed reason the most recently submitted guess was rejected,
 /// or `null` if the last submission was accepted (or none has been made
-/// yet).
+/// yet). [hintState] carries every hint revealed so far this game —
+/// defaults to [HintState.initial] (no hints used) for callers that don't
+/// care about hints.
 final class GameActive extends GameControllerState {
   /// Throws [ArgumentError] unless [view].[GameSessionView.status] is
   /// [GameStatus.inProgress] — [GameActive] and [GameCompleted] are
   /// mutually exclusive views of a session's lifecycle, so a won/lost
   /// session can never be represented as "active" here.
-  GameActive({required this.view, this.lastRejection}) {
+  GameActive({
+    required this.view,
+    this.lastRejection,
+    this.hintState = HintState.initial,
+  }) {
     if (view.status != GameStatus.inProgress) {
       throw ArgumentError.value(
         view.status,
@@ -97,6 +105,7 @@ final class GameActive extends GameControllerState {
 
   final GameSessionView view;
   final GuessValidationFailure? lastRejection;
+  final HintState hintState;
 }
 
 /// The game has ended. [session] is the full, final [GameSession] — with
@@ -136,4 +145,71 @@ final class GameStartupFailure extends GameControllerState {
   final GameConfig config;
   final Object error;
   final StackTrace stackTrace;
+}
+
+/// Hint availability and pricing for the currently active game, as returned
+/// by `GameController.hintAvailability`. Recomputed fresh on every read —
+/// never cached — so it always reflects the latest guesses and hints used.
+class HintAvailability {
+  const HintAvailability({
+    required this.canRequestHint,
+    required this.hintsUsed,
+    required this.maxHints,
+    required this.nextHintCost,
+  });
+
+  /// Whether calling `GameController.useHint` right now could reveal a
+  /// hint: the game is active, this difficulty's hint limit has not been
+  /// reached, and at least one letter position remains unrevealed. Does
+  /// *not* account for coin balance — a caller with insufficient coins
+  /// still sees `true` here (so the UI can still show the cost), and
+  /// `useHint` itself is what rejects the attempt for insufficient funds.
+  final bool canRequestHint;
+
+  /// The number of hints already used this game.
+  final int hintsUsed;
+
+  /// The maximum number of hints allowed this game, for this difficulty.
+  final int maxHints;
+
+  /// The coin cost of the next hint if used right now: `0` for a free
+  /// hint. Only meaningful when [canRequestHint] is `true`.
+  final int nextHintCost;
+}
+
+/// Why `GameController.useHint` did not reveal a hint.
+enum HintUnavailableReason {
+  /// No game is currently active (idle, loading, completed, or a failed
+  /// startup).
+  gameNotActive,
+
+  /// This difficulty's hint limit has already been reached this game.
+  limitReached,
+
+  /// Every letter position is already known (from a Bull or an earlier
+  /// hint this game); there is nothing left a hint could usefully reveal.
+  noUsefulHintRemains,
+
+  /// A paid hint was requested but the wallet balance is below its cost.
+  insufficientCoins,
+}
+
+/// The outcome of `GameController.useHint`.
+sealed class HintOutcome {
+  const HintOutcome();
+}
+
+/// A hint was successfully revealed. [coinsSpent] is `0` for a free hint.
+final class HintRevealed extends HintOutcome {
+  const HintRevealed({required this.hint, required this.coinsSpent});
+
+  final RevealedHint hint;
+  final int coinsSpent;
+}
+
+/// No hint was revealed and no coins were charged.
+final class HintNotRevealed extends HintOutcome {
+  const HintNotRevealed(this.reason);
+
+  final HintUnavailableReason reason;
 }

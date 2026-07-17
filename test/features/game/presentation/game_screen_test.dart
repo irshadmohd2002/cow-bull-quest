@@ -1,3 +1,4 @@
+import 'package:cowbullgame/coin_wallet.dart';
 import 'package:cowbullgame/features/game/controllers/game_controller.dart';
 import 'package:cowbullgame/features/game/data/word_repository.dart';
 import 'package:cowbullgame/features/game/models/game_config.dart';
@@ -742,5 +743,326 @@ void main() {
         expect(find.textContaining('LACE'), findsWidgets);
       },
     );
+  });
+
+  group('Milestone 14: coins and hints', () {
+    final hardConfig4 = GameConfig.forSelection(
+      wordLength: 4,
+      difficulty: GameDifficulty.hard,
+    );
+    final hintIcon = find.byIcon(Icons.lightbulb_outline);
+
+    testWidgets('shows the coin balance in the app bar', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      expect(find.text('100'), findsOneWidget);
+    });
+
+    testWidgets('Easy shows the "Hint · 20 coins" label', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Hint · 20 coins'), findsOneWidget);
+    });
+
+    testWidgets('Hard shows the "Free Hint" label before the first use', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, hardConfig4));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Free Hint'), findsOneWidget);
+    });
+
+    testWidgets('Hard shows "Hint · 20 coins" after the free hint is used', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, hardConfig4));
+      await tester.pumpAndSettle();
+
+      await tester.tap(hintIcon);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Free Hint'), findsNothing);
+      expect(find.text('Hint · 20 coins'), findsOneWidget);
+    });
+
+    testWidgets('a free hint requires no confirmation dialog', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, hardConfig4));
+      await tester.pumpAndSettle();
+
+      await tester.tap(hintIcon);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Use a hint?'), findsNothing);
+      expect(find.text('The first letter is L.'), findsOneWidget);
+      expect(wallet.balance, 100);
+    });
+
+    testWidgets('a paid-hint confirmation shows the cost and current '
+        'balance', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      await tester.tap(hintIcon);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Use a hint?'), findsOneWidget);
+      expect(find.textContaining('Cost: 20 coins'), findsOneWidget);
+      expect(find.textContaining('Your balance: 100 coins'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+      expect(find.text('Use 20 Coins'), findsOneWidget);
+    });
+
+    testWidgets('confirming a paid hint deducts coins and reveals the '
+        'hint', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      await tester.tap(hintIcon);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use 20 Coins'));
+      await tester.pumpAndSettle();
+
+      expect(wallet.balance, 80);
+      expect(find.text('80'), findsOneWidget);
+      expect(find.text('The first letter is L.'), findsOneWidget);
+    });
+
+    testWidgets('cancelling a paid-hint confirmation leaves the balance '
+        'and hint count unchanged', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      await tester.tap(hintIcon);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(wallet.balance, 100);
+      expect(find.text('100'), findsOneWidget);
+      expect(find.text('Hint · 20 coins'), findsOneWidget);
+      expect(find.textContaining('letter is'), findsNothing);
+    });
+
+    testWidgets('a second hint on Easy is unavailable after the first is '
+        'used', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+      await tester.tap(hintIcon);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use 20 Coins'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No hints remaining'), findsOneWidget);
+      final button = tester.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, 'No hints remaining'),
+      );
+      expect(button.onPressed, isNull);
+    });
+
+    testWidgets('an insufficient balance shows clear guidance and disables the '
+        'button', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final wallet = CoinWallet(initialBalance: 5);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Not enough coins for a hint.'), findsOneWidget);
+      final button = tester.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, 'Hint · 20 coins'),
+      );
+      expect(button.onPressed, isNull);
+    });
+
+    testWidgets('hints are hidden once the game is won', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(find.text('You won!'), findsOneWidget);
+      expect(hintIcon, findsNothing);
+    });
+
+    testWidgets('hints are unavailable before the game has finished '
+        'loading', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      // No pumpAndSettle: the game is still loading its secret word.
+      expect(hintIcon, findsNothing);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a rapid double-tap on the Hint button opens at most one '
+        'confirmation dialog and deducts coins at most once', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final wallet = CoinWallet(initialBalance: 100);
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        coinWallet: wallet,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      await tester.tap(hintIcon);
+      await tester.tap(hintIcon, warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Use a hint?'), findsOneWidget);
+
+      await tester.tap(find.text('Use 20 Coins'));
+      await tester.pumpAndSettle();
+
+      expect(wallet.balance, 80);
+    });
+
+    testWidgets('hint information remains readable in dark mode', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          darkTheme: AppTheme.dark,
+          themeMode: ThemeMode.dark,
+          home: GameScreen(controller: controller, config: hardConfig4),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(hintIcon);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('The first letter is L.'), findsOneWidget);
+    });
+
+    testWidgets('hint information remains readable in light mode', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          darkTheme: AppTheme.light,
+          themeMode: ThemeMode.light,
+          home: GameScreen(controller: controller, config: hardConfig4),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(hintIcon);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('The first letter is L.'), findsOneWidget);
+    });
+
+    testWidgets('the hint button has an accessible label', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsLabel('Use hint for 20 coins'), findsOneWidget);
+    });
   });
 }

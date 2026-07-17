@@ -9,6 +9,7 @@ void main() {
     VoidCallback? onOpenRules,
     VoidCallback? onOpenSettings,
     VoidCallback? onOpenStatistics,
+    int coinBalance = 100,
   }) {
     return MaterialApp(
       home: HomeScreen(
@@ -16,6 +17,7 @@ void main() {
         onOpenRules: onOpenRules ?? () {},
         onOpenSettings: onOpenSettings ?? () {},
         onOpenStatistics: onOpenStatistics ?? () {},
+        coinBalance: coinBalance,
       ),
     );
   }
@@ -405,6 +407,24 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Milestone 14: coin balance', () {
+    testWidgets('shows the coin balance', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}, coinBalance: 100));
+      expect(find.text('100'), findsOneWidget);
+    });
+
+    testWidgets('reflects an updated balance', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}, coinBalance: 250));
+      expect(find.text('250'), findsOneWidget);
+      expect(find.text('100'), findsNothing);
+    });
+
+    testWidgets('has an accessible label', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}, coinBalance: 100));
+      expect(find.bySemanticsLabel('100 coins'), findsOneWidget);
     });
   });
 }

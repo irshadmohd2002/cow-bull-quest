@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_spacing.dart';
 import '../../../theme/app_status_colors.dart';
+import '../../../widgets/coin_balance_badge.dart';
 import '../controllers/game_controller.dart';
 import '../controllers/game_controller_state.dart';
 import '../models/game_config.dart';
@@ -14,6 +15,7 @@ import '../services/guess_validator.dart';
 import 'widgets/game_status_panel.dart';
 import 'widgets/guess_history.dart';
 import 'widgets/guess_input.dart';
+import 'widgets/hint_section.dart';
 
 /// Maps a [GuessValidationFailure] to concise, human-facing text.
 ///
@@ -79,6 +81,14 @@ class _GameScreenState extends State<GameScreen> {
   /// flashes rather than silently no-opping.
   int _rejectionSequence = 0;
 
+  /// Set the instant a hint request begins (before any `await`, i.e. before
+  /// a paid hint's confirmation dialog is even shown) and cleared once it
+  /// settles. Guards against a rapid double-tap on the Hint button
+  /// triggering two overlapping requests — and, by extension, two
+  /// deductions — for what the player intended as a single hint, the same
+  /// pattern [_submitting] already uses for guess submission.
+  bool _hintBusy = false;
+
   @override
   void initState() {
     super.initState();
@@ -126,16 +136,73 @@ class _GameScreenState extends State<GameScreen> {
     setState(() => _submitting = false);
   }
 
+  /// Handles a tap on the Hint button for the current [availability].
+  ///
+  /// A free hint (Hard's first) is used immediately, with no confirmation.
+  /// A paid hint shows a confirmation dialog stating the cost and current
+  /// balance first; [GameController.useHint] is only ever called if the
+  /// player confirms, and never if they cancel. `_hintBusy` is set
+  /// synchronously, before the `await showDialog` below, so a rapid
+  /// double-tap on the Hint button itself cannot open two overlapping
+  /// requests (see [_hintBusy]'s doc comment).
+  Future<void> _handleHintUse(HintAvailability availability) async {
+    if (_hintBusy || !availability.canRequestHint) return;
+    setState(() => _hintBusy = true);
+    try {
+      if (availability.nextHintCost > 0) {
+        final balance = widget.controller.coinWallet.balance;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Use a hint?'),
+            content: Text(
+              'This reveals one correct letter and its exact position in '
+              'the secret word.\n\n'
+              'Cost: ${availability.nextHintCost} coins\n'
+              'Your balance: $balance coins',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text('Use ${availability.nextHintCost} Coins'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true) return;
+      }
+      widget.controller.useHint();
+    } finally {
+      if (mounted) setState(() => _hintBusy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Cow Bull Quest')),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: ListenableBuilder(
-            listenable: widget.controller,
-            builder: (context, _) => _buildBody(widget.controller.state),
+    return ListenableBuilder(
+      listenable: widget.controller,
+      builder: (context, _) => Scaffold(
+        appBar: AppBar(
+          title: const Text('Cow Bull Quest'),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.md),
+              child: Center(
+                child: CoinBalanceBadge(
+                  balance: widget.controller.coinWallet.balance,
+                ),
+              ),
+            ),
+          ],
+        ),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: _buildBody(widget.controller.state),
           ),
         ),
       ),
@@ -154,6 +221,11 @@ class _GameScreenState extends State<GameScreen> {
         submitEnabled: !_submitting,
         rejectionSequence: _rejectionSequence,
         onSubmit: _handleSubmit,
+        hintAvailability: widget.controller.hintAvailability!,
+        coinBalance: widget.controller.coinWallet.balance,
+        hintBusy: _hintBusy,
+        onUseHint: () =>
+            unawaited(_handleHintUse(widget.controller.hintAvailability!)),
       ),
       GameCompleted() => _CompletedGameView(
         state: state,
@@ -202,6 +274,10 @@ class _ActiveGameView extends StatelessWidget {
     required this.submitEnabled,
     required this.rejectionSequence,
     required this.onSubmit,
+    required this.hintAvailability,
+    required this.coinBalance,
+    required this.hintBusy,
+    required this.onUseHint,
   });
 
   final GameActive state;
@@ -212,6 +288,10 @@ class _ActiveGameView extends StatelessWidget {
   final bool submitEnabled;
   final int rejectionSequence;
   final ValueChanged<String> onSubmit;
+  final HintAvailability hintAvailability;
+  final int coinBalance;
+  final bool hintBusy;
+  final VoidCallback onUseHint;
 
   @override
   Widget build(BuildContext context) {
@@ -219,14 +299,58 @@ class _ActiveGameView extends StatelessWidget {
     final message = rejection == null
         ? null
         : _validationMessage(rejection, wordLength);
+    final hintEnabled =
+        hintAvailability.canRequestHint &&
+        !hintBusy &&
+        (hintAvailability.nextHintCost == 0 ||
+            coinBalance >= hintAvailability.nextHintCost);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        GameStatusPanel(view: state.view, difficultyLabel: difficultyLabel),
-        const SizedBox(height: AppSpacing.xs),
-        _ValidationBanner(message: message, sequence: rejectionSequence),
-        Expanded(child: GuessHistory(guesses: state.view.guesses)),
+        // A CustomScrollView with a SliverFillRemaining(hasScrollBody: true)
+        // last sliver behaves exactly like Expanded(child: GuessHistory(…))
+        // whenever the fixed content above it (status panel, hint section,
+        // validation banner) fits within the available height — but unlike
+        // a plain Expanded inside this Column, it degrades to a scrollable
+        // region instead of a hard RenderFlex overflow if that fixed
+        // content alone ever exceeds the available height (e.g. at extreme
+        // text-scale factors on a short viewport). GuessInput below stays
+        // outside this scroll region so it, and the keyboard it opens,
+        // remain fixed at the bottom regardless.
+        Expanded(
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: GameStatusPanel(
+                  view: state.view,
+                  difficultyLabel: difficultyLabel,
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.sm)),
+              SliverToBoxAdapter(
+                child: HintSection(
+                  availability: hintAvailability,
+                  revealedHints: state.hintState.revealedHints,
+                  coinBalance: coinBalance,
+                  enabled: hintEnabled,
+                  onUseHint: onUseHint,
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xs)),
+              SliverToBoxAdapter(
+                child: _ValidationBanner(
+                  message: message,
+                  sequence: rejectionSequence,
+                ),
+              ),
+              SliverFillRemaining(
+                hasScrollBody: true,
+                child: GuessHistory(guesses: state.view.guesses),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: AppSpacing.sm),
         GuessInput(
           controller: guessTextController,

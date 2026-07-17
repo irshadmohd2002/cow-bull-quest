@@ -130,6 +130,51 @@ class RulesScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),
+              _SectionHeading('Coins & Hints'),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'New players begin with 100 coins, stored only on this '
+                'device. A hint reveals one correct letter and its exact '
+                'position in the secret word, and never uses up an '
+                'attempt.',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _RuleItem(
+                        icon: Icons.monetization_on,
+                        heading: 'Starting coins',
+                        explanation: 'Every new player begins with 100 coins.',
+                        iconColor: colorScheme.tertiary,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _RuleItem(
+                        icon: Icons.lightbulb_outline,
+                        heading: 'Easy and Medium hints',
+                        explanation: 'One hint per game, costing 20 coins.',
+                        iconColor: colorScheme.tertiary,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _RuleItem(
+                        icon: Icons.lightbulb,
+                        heading: 'Hard hints',
+                        explanation:
+                            'Up to two hints per game: the first is free, '
+                            'the second costs 20 coins.',
+                        iconColor: colorScheme.tertiary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
               _SectionHeading('Examples'),
               const SizedBox(height: AppSpacing.md),
               const _RuleExample(
