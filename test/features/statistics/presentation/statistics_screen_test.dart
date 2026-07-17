@@ -41,11 +41,15 @@ StatisticsSnapshot _readySnapshot() => StatisticsSnapshot(
 Widget _buildSubject({
   required StatisticsControllerState state,
   VoidCallback? onClearStatistics,
+  int currentStreak = 0,
+  int longestStreak = 0,
 }) {
   return MaterialApp(
     home: StatisticsScreen(
       state: state,
       onClearStatistics: onClearStatistics ?? () {},
+      currentStreak: currentStreak,
+      longestStreak: longestStreak,
     ),
   );
 }
@@ -254,5 +258,61 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byTooltip('Clear statistics'), findsOneWidget);
+  });
+
+  group('Milestone 18: daily streak card', () {
+    testWidgets('shows current and longest daily streak', (tester) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          state: StatisticsReady(_readySnapshot()),
+          currentStreak: 4,
+          longestStreak: 9,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Daily Streak'), findsOneWidget);
+      expect(find.text('4 days'), findsOneWidget);
+      expect(find.text('9 days'), findsOneWidget);
+    });
+
+    testWidgets(
+      'is shown even while statistics are still loading — streak data is '
+      'always eagerly available',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildSubject(
+            state: const StatisticsLoading(),
+            currentStreak: 2,
+            longestStreak: 2,
+          ),
+        );
+
+        expect(find.text('Daily Streak'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'does not duplicate the win-streak labels from the Overview card',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildSubject(
+            state: StatisticsReady(_readySnapshot()),
+            currentStreak: 4,
+            longestStreak: 9,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // "Current streak"/"Best streak" belong to the Overview card's win
+        // streak; the daily streak card must use different wording
+        // ("Current"/"Longest") so the two concepts never read as the same
+        // thing.
+        expect(find.text('Current streak'), findsOneWidget);
+        expect(find.text('Best streak'), findsOneWidget);
+        expect(find.text('Current'), findsOneWidget);
+        expect(find.text('Longest'), findsOneWidget);
+      },
+    );
   });
 }

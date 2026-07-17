@@ -24,4 +24,12 @@ abstract final class StorageKeys {
   /// The persisted haptic-feedback-enabled `'true'`/`'false'` value (see
   /// `audio_feedback_settings.dart`).
   static const String hapticsEnabled = 'haptics_enabled';
+
+  /// The persisted, versioned daily-streak JSON document (see
+  /// `features/streak/data/local_streak_repository.dart`).
+  static const String streak = 'daily_streak';
+
+  /// The persisted, versioned Daily Challenge results JSON document (see
+  /// `features/daily_challenge/data/local_daily_challenge_repository.dart`).
+  static const String dailyChallengeResults = 'daily_challenge_results';
 }

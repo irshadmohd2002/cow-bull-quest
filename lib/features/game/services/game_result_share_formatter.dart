@@ -26,11 +26,15 @@ class GameResultShareFormatter {
   /// (`session.status` of [GameStatus.won] or [GameStatus.lost]).
   /// [difficulty] is the pool the game's secret word was drawn from, and
   /// [hintsUsed] is the number of hints used this game; the hints line is
-  /// omitted entirely when it is zero.
+  /// omitted entirely when it is zero. [currentStreak], if given and
+  /// greater than zero, adds a final "🔥 N-day streak" line — omitted
+  /// entirely when `null` or `0`, so existing callers that don't pass it see
+  /// byte-identical output to before this parameter existed.
   String format({
     required GameSession session,
     required GameDifficulty difficulty,
     required int hintsUsed,
+    int? currentStreak,
   }) {
     final won = session.status == GameStatus.won;
     final buffer = StringBuffer()
@@ -53,6 +57,9 @@ class GameResultShareFormatter {
     );
     if (hintsUsed > 0) {
       buffer.writeln(_countWithNoun(hintsUsed, 'hint used', 'hints used'));
+    }
+    if (currentStreak != null && currentStreak > 0) {
+      buffer.writeln('🔥 $currentStreak-day streak');
     }
 
     if (won) {

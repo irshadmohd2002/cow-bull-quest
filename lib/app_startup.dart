@@ -173,6 +173,9 @@ class _AppStartupState extends State<AppStartup> {
         coinWallet: bootstrap.coinWallet,
         audioFeedbackSettings: bootstrap.audioFeedbackSettings,
         audioFeedback: bootstrap.audioFeedback,
+        streakController: bootstrap.streakController,
+        dailyChallengeController: bootstrap.dailyChallengeController,
+        clock: bootstrap.clock,
       ),
     };
   }

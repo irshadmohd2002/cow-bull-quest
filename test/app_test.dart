@@ -1,12 +1,15 @@
 import 'package:cowbullgame/app.dart';
 import 'package:cowbullgame/app_settings.dart';
 import 'package:cowbullgame/core/privacy_policy.dart' as privacy_policy_config;
+import 'package:cowbullgame/core/time/local_date.dart';
 import 'package:cowbullgame/features/game/data/asset_word_repository.dart';
 import 'package:cowbullgame/features/game/data/word_repository.dart';
 import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/fake_local_date_provider.dart';
 import 'support/fake_statistics_repository.dart';
 
 /// A minimal [WordRepository] fake so app-level navigation can be exercised
@@ -25,6 +28,14 @@ class _FakeWordRepository implements WordRepository {
   final Map<int, Set<String>> allowedWordsByLength = {
     4: {'lace'},
   };
+
+  /// The ordered eligible-word pool [loadSecretWords] returns, keyed by
+  /// `(wordLength, difficulty)` — only used by Daily Challenge tests, which
+  /// compute the deterministic secret word from this pool via
+  /// `DailyChallengeService.secretWordFor`. Empty (no candidates) unless a
+  /// test populates it.
+  final Map<(int, GameDifficulty), List<String>>
+  secretWordsByLengthAndDifficulty = {};
 
   @override
   Future<String> selectSecretWord(
@@ -48,7 +59,9 @@ class _FakeWordRepository implements WordRepository {
   Future<List<String>> loadSecretWords(
     int wordLength,
     GameDifficulty difficulty,
-  ) async => const [];
+  ) async => List.unmodifiable(
+    secretWordsByLengthAndDifficulty[(wordLength, difficulty)] ?? const [],
+  );
 
   @override
   Future<bool> isAllowed(String word, int wordLength) async => true;
@@ -1173,5 +1186,292 @@ void main() {
 
       expect(find.text('100'), findsOneWidget);
     });
+  });
+
+  group('Milestone 18: streak and Daily Challenge', () {
+    Future<void> enterAndSubmit(WidgetTester tester, String guess) async {
+      await tester.enterText(find.byType(TextField), guess);
+      await tester.tap(find.text('Submit'));
+      await tester.pumpAndSettle();
+    }
+
+    LocalDate today() => LocalDate(year: 2026, month: 7, day: 18);
+
+    testWidgets(
+      'Home shows a friendly 0-day streak before any game is played',
+      (tester) async {
+        await tester.pumpWidget(
+          CowBullApp(wordRepository: _FakeWordRepository()),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('0-day streak'), findsOneWidget);
+        expect(find.textContaining('Best: 0'), findsOneWidget);
+      },
+    );
+
+    testWidgets('completing a normal game starts a 1-day streak, shown on the '
+        'completed screen and back on Home', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      await tester.pumpWidget(
+        CowBullApp(wordRepository: repo, clock: FakeLocalDateProvider(today())),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(find.textContaining('Streak started: 1 day'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Return to Home'));
+      await tester.tap(find.text('Return to Home'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1-day streak'), findsOneWidget);
+    });
+
+    testWidgets(
+      'a second completed game the same day does not extend the streak '
+      'again',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        await tester.pumpWidget(
+          CowBullApp(
+            wordRepository: repo,
+            clock: FakeLocalDateProvider(today()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Start Game'));
+        await tester.tap(find.text('Start Game'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+        expect(find.textContaining('Streak started: 1 day'), findsOneWidget);
+
+        await tester.tap(find.text('Restart'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(
+          find.textContaining('Today already counted · 1-day streak'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('the Daily Challenge card is visible and shows "Not played"', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        CowBullApp(wordRepository: _FakeWordRepository()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Daily Challenge'), findsOneWidget);
+      expect(find.text('Not played'), findsOneWidget);
+    });
+
+    testWidgets(
+      'starting the Daily Challenge uses 4 letters, Medium difficulty, and '
+      '10 attempts',
+      (tester) async {
+        final repo = _FakeWordRepository()
+          ..wordsByLength[4] = 'lace'
+          ..secretWordsByLengthAndDifficulty[(4, GameDifficulty.common)] = [
+            'lace',
+          ];
+        await tester.pumpWidget(
+          CowBullApp(
+            wordRepository: repo,
+            clock: FakeLocalDateProvider(today()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Daily Challenge'));
+        await tester.tap(find.text('Daily Challenge'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Medium'), findsWidgets);
+        expect(
+          find.bySemanticsLabel(RegExp('Attempts used 0 of 10')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'winning the Daily Challenge marks Home "Completed · Won" and counts '
+      "toward today's streak",
+      (tester) async {
+        final repo = _FakeWordRepository()
+          ..wordsByLength[4] = 'lace'
+          ..secretWordsByLengthAndDifficulty[(4, GameDifficulty.common)] = [
+            'lace',
+          ];
+        await tester.pumpWidget(
+          CowBullApp(
+            wordRepository: repo,
+            clock: FakeLocalDateProvider(today()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Daily Challenge'));
+        await tester.tap(find.text('Daily Challenge'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(find.text('You won!'), findsOneWidget);
+        expect(find.textContaining('Streak started: 1 day'), findsOneWidget);
+
+        await tester.ensureVisible(find.text('Return to Home'));
+        await tester.tap(find.text('Return to Home'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Completed · Won'), findsOneWidget);
+        expect(find.text('1-day streak'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a normal game and the Daily Challenge on the same day only count the '
+      'streak once, however they are ordered',
+      (tester) async {
+        final repo = _FakeWordRepository()
+          ..wordsByLength[4] = 'lace'
+          ..secretWordsByLengthAndDifficulty[(4, GameDifficulty.common)] = [
+            'lace',
+          ];
+        await tester.pumpWidget(
+          CowBullApp(
+            wordRepository: repo,
+            clock: FakeLocalDateProvider(today()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Normal game first.
+        await tester.ensureVisible(find.text('Start Game'));
+        await tester.tap(find.text('Start Game'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+        expect(find.textContaining('Streak started: 1 day'), findsOneWidget);
+        await tester.ensureVisible(find.text('Return to Home'));
+        await tester.tap(find.text('Return to Home'));
+        await tester.pumpAndSettle();
+
+        // Daily Challenge second, same day: must not extend the streak
+        // again.
+        await tester.ensureVisible(find.text('Daily Challenge'));
+        await tester.tap(find.text('Daily Challenge'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(
+          find.textContaining('Today already counted · 1-day streak'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('a paid hint in the Daily Challenge still costs 20 coins', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()
+        ..allowedWordsByLength[4] = {'lace', 'mace'}
+        ..secretWordsByLengthAndDifficulty[(4, GameDifficulty.common)] = [
+          'lace',
+        ];
+      await tester.pumpWidget(
+        CowBullApp(wordRepository: repo, clock: FakeLocalDateProvider(today())),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Daily Challenge'));
+      await tester.tap(find.text('Daily Challenge'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('100'), findsOneWidget);
+      await tester.ensureVisible(find.textContaining('Hint'));
+      await tester.tap(find.textContaining('Hint').first);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('20 coins'), findsWidgets);
+      await tester.tap(find.text('Use 20 Coins'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('80'), findsOneWidget);
+    });
+
+    testWidgets(
+      'sharing the Daily Challenge result contains the date, aggregate '
+      'bulls/cows, and never the secret word — even after a practice replay',
+      (tester) async {
+        final repo = _FakeWordRepository()
+          ..wordsByLength[4] = 'lace'
+          ..secretWordsByLengthAndDifficulty[(4, GameDifficulty.common)] = [
+            'lace',
+          ];
+        final clipboardCalls = <Map<Object?, Object?>>[];
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              clipboardCalls.add(call.arguments as Map<Object?, Object?>);
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+
+        await tester.pumpWidget(
+          CowBullApp(
+            wordRepository: repo,
+            clock: FakeLocalDateProvider(today()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Daily Challenge'));
+        await tester.tap(find.text('Daily Challenge'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        await tester.ensureVisible(find.byIcon(Icons.copy));
+        await tester.tap(find.byIcon(Icons.copy));
+        await tester.pump();
+
+        expect(clipboardCalls, hasLength(1));
+        final officialText = clipboardCalls.single['text'] as String;
+        expect(officialText, contains('Cow Bull Quest — Daily Challenge'));
+        expect(officialText, contains('18 July 2026'));
+        expect(officialText, contains('🟩'));
+        expect(officialText, contains('🟨'));
+        expect(officialText.toLowerCase(), isNot(contains('lace')));
+
+        // A practice replay wins in fewer attempts (immediately), but
+        // sharing must still reflect the official first completion above,
+        // not this replay.
+        await tester.ensureVisible(find.text('Restart'));
+        await tester.tap(find.text('Restart'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        await tester.ensureVisible(find.byIcon(Icons.copy));
+        await tester.tap(find.byIcon(Icons.copy));
+        await tester.pump();
+
+        expect(clipboardCalls, hasLength(2));
+        expect(clipboardCalls[1]['text'], officialText);
+      },
+    );
   });
 }

@@ -290,4 +290,35 @@ void main() {
       expect(first, second);
     });
   });
+
+  group('currentStreak', () {
+    test('is omitted when null', () {
+      final text = formatter.format(
+        session: wonSession(),
+        difficulty: GameDifficulty.common,
+        hintsUsed: 0,
+      );
+      expect(text, isNot(contains('streak')));
+    });
+
+    test('is omitted when zero', () {
+      final text = formatter.format(
+        session: wonSession(),
+        difficulty: GameDifficulty.common,
+        hintsUsed: 0,
+        currentStreak: 0,
+      );
+      expect(text, isNot(contains('streak')));
+    });
+
+    test('is included when positive', () {
+      final text = formatter.format(
+        session: wonSession(),
+        difficulty: GameDifficulty.common,
+        hintsUsed: 0,
+        currentStreak: 5,
+      );
+      expect(text, contains('🔥 5-day streak'));
+    });
+  });
 }

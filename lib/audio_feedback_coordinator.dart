@@ -142,6 +142,19 @@ class AudioFeedbackCoordinator
     }
   }
 
+  /// The daily-play streak was just started or extended by a qualifying game
+  /// completion. Never called for a completion that only re-confirmed a
+  /// streak day already counted earlier today — the app-level composition
+  /// root only calls this for a genuine `StreakStarted`/`StreakExtended`
+  /// result, never `StreakAlreadyCounted`. Haptic-only: no new sound asset is
+  /// added for this feedback.
+  void onStreakUpdated() {
+    if (_disposed) return;
+    if (_settings.hapticsEnabled) {
+      _fireAndForget(_hapticService.lightImpact);
+    }
+  }
+
   @override
   void onValidGuess() {
     if (_disposed) return;

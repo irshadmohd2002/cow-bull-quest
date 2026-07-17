@@ -8,6 +8,7 @@ import 'package:cowbullgame/features/game/models/game_config.dart';
 import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:cowbullgame/features/game/presentation/game_screen.dart';
 import 'package:cowbullgame/features/game/services/game_engine.dart';
+import 'package:cowbullgame/models/streak_feedback.dart';
 import 'package:cowbullgame/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -72,6 +73,9 @@ void main() {
     GameConfig config, {
     VoidCallback? onButtonTap,
     ResultShareService? shareService,
+    ValueNotifier<StreakFeedback?>? streakFeedback,
+    int? currentStreak,
+    ResultTextBuilder? resultTextBuilder,
   }) {
     return MaterialApp(
       home: GameScreen(
@@ -79,6 +83,9 @@ void main() {
         config: config,
         onButtonTap: onButtonTap,
         shareService: shareService ?? FakeResultShareService(),
+        streakFeedback: streakFeedback,
+        currentStreak: currentStreak,
+        resultTextBuilder: resultTextBuilder,
       ),
     );
   }
@@ -1794,6 +1801,219 @@ void main() {
           expect(find.text('Return to Home'), findsOneWidget);
         },
       );
+    });
+  });
+
+  group('Milestone 18: streak feedback', () {
+    testWidgets('shows "Streak started" text for a started streak', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      final streakFeedback = ValueNotifier<StreakFeedback?>(
+        const StreakFeedback(
+          kind: StreakFeedbackKind.started,
+          currentStreak: 1,
+        ),
+      );
+
+      await tester.pumpWidget(
+        buildSubject(controller, config4, streakFeedback: streakFeedback),
+      );
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(find.textContaining('Streak started: 1 day'), findsOneWidget);
+    });
+
+    testWidgets('shows "Streak extended" text for an extended streak', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      final streakFeedback = ValueNotifier<StreakFeedback?>(
+        const StreakFeedback(
+          kind: StreakFeedbackKind.extended,
+          currentStreak: 4,
+        ),
+      );
+
+      await tester.pumpWidget(
+        buildSubject(controller, config4, streakFeedback: streakFeedback),
+      );
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(find.textContaining('Streak extended: 4 days'), findsOneWidget);
+    });
+
+    testWidgets(
+      'shows "Today already counted" text without misleadingly implying a '
+      'new extension',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+        final streakFeedback = ValueNotifier<StreakFeedback?>(
+          const StreakFeedback(
+            kind: StreakFeedbackKind.alreadyCounted,
+            currentStreak: 4,
+          ),
+        );
+
+        await tester.pumpWidget(
+          buildSubject(controller, config4, streakFeedback: streakFeedback),
+        );
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(
+          find.textContaining('Today already counted · 4-day streak'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Streak extended'), findsNothing);
+        expect(find.textContaining('Streak started'), findsNothing);
+      },
+    );
+
+    testWidgets('shows no streak feedback at all when null', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(find.textContaining('streak'), findsNothing);
+    });
+
+    testWidgets(
+      'rebuilding the completed screen with the same streak feedback does '
+      'not duplicate the entrance animation (no exception, single banner)',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+        final streakFeedback = ValueNotifier<StreakFeedback?>(
+          const StreakFeedback(
+            kind: StreakFeedbackKind.started,
+            currentStreak: 1,
+          ),
+        );
+
+        await tester.pumpWidget(
+          buildSubject(controller, config4, streakFeedback: streakFeedback),
+        );
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+        expect(find.textContaining('Streak started: 1 day'), findsOneWidget);
+
+        // Rebuild for an unrelated reason (a fresh, config-identical
+        // widget), without any new completion occurring.
+        await tester.pumpWidget(
+          buildSubject(controller, config4, streakFeedback: streakFeedback),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.textContaining('Streak started: 1 day'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'resultTextBuilder overrides Share/Copy text instead of the default '
+      'formatter',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+        final clipboardCalls = <Map<Object?, Object?>>[];
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              clipboardCalls.add(call.arguments as Map<Object?, Object?>);
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+
+        await tester.pumpWidget(
+          buildSubject(
+            controller,
+            config4,
+            resultTextBuilder: (state, hintsUsed) => 'custom override text',
+          ),
+        );
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        await tester.ensureVisible(find.byIcon(Icons.copy));
+        await tester.tap(find.byIcon(Icons.copy));
+        await tester.pump();
+
+        expect(clipboardCalls, hasLength(1));
+        expect(clipboardCalls.single['text'], 'custom override text');
+      },
+    );
+
+    testWidgets('currentStreak adds a streak line to the default share text', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      final clipboardCalls = <Map<Object?, Object?>>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            clipboardCalls.add(call.arguments as Map<Object?, Object?>);
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
+      await tester.pumpWidget(
+        buildSubject(controller, config4, currentStreak: 5),
+      );
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      await tester.ensureVisible(find.byIcon(Icons.copy));
+      await tester.tap(find.byIcon(Icons.copy));
+      await tester.pump();
+
+      expect(clipboardCalls.single['text'], contains('🔥 5-day streak'));
     });
   });
 }

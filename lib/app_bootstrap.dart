@@ -7,8 +7,13 @@ import 'core/haptics/platform_haptic_service.dart';
 import 'core/persistence/preferences_store.dart';
 import 'core/persistence/shared_preferences_store.dart';
 import 'core/persistence/storage_keys.dart';
+import 'core/time/local_date_provider.dart';
+import 'features/daily_challenge/controllers/daily_challenge_controller.dart';
+import 'features/daily_challenge/data/local_daily_challenge_repository.dart';
 import 'features/statistics/data/local_statistics_repository.dart';
 import 'features/statistics/data/statistics_repository.dart';
+import 'features/streak/controllers/streak_controller.dart';
+import 'features/streak/data/local_streak_repository.dart';
 
 /// The app's fully-resolved startup dependencies.
 ///
@@ -24,6 +29,9 @@ class AppBootstrap {
     required this.coinWallet,
     required this.audioFeedbackSettings,
     required this.audioFeedback,
+    required this.clock,
+    required this.streakController,
+    required this.dailyChallengeController,
   });
 
   /// Loads persisted preferences and constructs the shared [PreferencesStore]
@@ -34,7 +42,17 @@ class AppBootstrap {
   /// [CoinWallet] backing the coin balance and hint purchases, and the
   /// [AudioFeedbackSettings]/[AudioFeedbackCoordinator] pair backing sound,
   /// music, and haptic feedback.
-  static Future<AppBootstrap> load() async {
+  ///
+  /// [clock] defaults to [SystemLocalDateProvider] (the device's real local
+  /// clock) and is threaded through to [streakController] and
+  /// [dailyChallengeController] — and, unchanged, into [AppBootstrap] itself
+  /// so the app-level composition root can reuse the exact same clock
+  /// instance when starting a new Daily Challenge — so every "today" this
+  /// app computes agrees. Overridable only so tests can inject a fixed/fake
+  /// clock without touching the real device time.
+  static Future<AppBootstrap> load({
+    LocalDateProvider clock = const SystemLocalDateProvider(),
+  }) async {
     const store = SharedPreferencesStore();
     final settings = await AppSettings.load(store);
     final statisticsRepository = LocalStatisticsRepository(store: store);
@@ -45,12 +63,23 @@ class AppBootstrap {
       hapticService: const PlatformHapticService(),
       settings: audioFeedbackSettings,
     );
+    final streakController = await StreakController.load(
+      repository: LocalStreakRepository(store: store),
+      clock: clock,
+    );
+    final dailyChallengeController = await DailyChallengeController.load(
+      repository: LocalDailyChallengeRepository(store: store),
+      clock: clock,
+    );
     return AppBootstrap(
       settings: settings,
       statisticsRepository: statisticsRepository,
       coinWallet: coinWallet,
       audioFeedbackSettings: audioFeedbackSettings,
       audioFeedback: audioFeedback,
+      clock: clock,
+      streakController: streakController,
+      dailyChallengeController: dailyChallengeController,
     );
   }
 
@@ -76,10 +105,25 @@ class AppBootstrap {
   /// [HapticService] pair. Owned by [CowBullApp] for the app's lifetime.
   final AudioFeedbackCoordinator audioFeedback;
 
+  /// The single app-wide source of "today", shared by [streakController],
+  /// [dailyChallengeController], and the composition root itself whenever it
+  /// needs today's date (e.g. to start a new Daily Challenge).
+  final LocalDateProvider clock;
+
+  /// The app-wide daily-play-streak state, already seeded from persisted
+  /// storage (or [StreakState.empty] on a fresh install). Owned by
+  /// [CowBullApp] for the app's lifetime.
+  final StreakController streakController;
+
+  /// The app-wide "today's Daily Challenge" state, already seeded from
+  /// persisted storage. Owned by [CowBullApp] for the app's lifetime.
+  final DailyChallengeController dailyChallengeController;
+
   /// Deletes every app-owned local storage key — currently
   /// [StorageKeys.themePreference], [StorageKeys.statistics],
   /// [StorageKeys.coinBalance], [StorageKeys.soundEffectsEnabled],
-  /// [StorageKeys.musicEnabled], and [StorageKeys.hapticsEnabled], and
+  /// [StorageKeys.musicEnabled], [StorageKeys.hapticsEnabled],
+  /// [StorageKeys.streak], and [StorageKeys.dailyChallengeResults], and
   /// nothing else — from [store]. Used by the startup failure screen's
   /// "Reset local data" action so a corrupted or otherwise unrecoverable
   /// local storage state can be cleared without reinstalling the app.
@@ -95,5 +139,7 @@ class AppBootstrap {
     await store.remove(StorageKeys.soundEffectsEnabled);
     await store.remove(StorageKeys.musicEnabled);
     await store.remove(StorageKeys.hapticsEnabled);
+    await store.remove(StorageKeys.streak);
+    await store.remove(StorageKeys.dailyChallengeResults);
   }
 }

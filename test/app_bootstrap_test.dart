@@ -84,6 +84,34 @@ void main() {
         expect(bootstrap.audioFeedback, isNotNull);
       },
     );
+
+    test(
+      'a fresh install starts the streak at zero on both counters',
+      () async {
+        final bootstrap = await AppBootstrap.load();
+        expect(bootstrap.streakController.state.currentStreak, 0);
+        expect(bootstrap.streakController.state.longestStreak, 0);
+      },
+    );
+
+    test('restores a persisted streak', () async {
+      SharedPreferences.setMockInitialValues({
+        StorageKeys.streak:
+            '{"version":1,"currentStreak":3,"longestStreak":5,'
+            '"lastQualifyingDate":"2026-07-17"}',
+      });
+      final bootstrap = await AppBootstrap.load();
+      expect(bootstrap.streakController.state.currentStreak, 3);
+      expect(bootstrap.streakController.state.longestStreak, 5);
+    });
+
+    test(
+      "a fresh install has no official Daily Challenge result for today",
+      () async {
+        final bootstrap = await AppBootstrap.load();
+        expect(bootstrap.dailyChallengeController.officialResultToday, isNull);
+      },
+    );
   });
 
   group('AppBootstrap.resetLocalData', () {
@@ -111,6 +139,25 @@ void main() {
       );
       expect(store.values.containsKey(StorageKeys.musicEnabled), isFalse);
       expect(store.values.containsKey(StorageKeys.hapticsEnabled), isFalse);
+    });
+
+    test('removes the streak and Daily Challenge history keys', () async {
+      final store = FakePreferencesStore(
+        initialValues: {
+          StorageKeys.streak:
+              '{"version":1,"currentStreak":3,"longestStreak":5,'
+              '"lastQualifyingDate":"2026-07-17"}',
+          StorageKeys.dailyChallengeResults: '{"version":1,"results":{}}',
+        },
+      );
+
+      await AppBootstrap.resetLocalData(store);
+
+      expect(store.values.containsKey(StorageKeys.streak), isFalse);
+      expect(
+        store.values.containsKey(StorageKeys.dailyChallengeResults),
+        isFalse,
+      );
     });
 
     test('leaves any other key untouched', () async {

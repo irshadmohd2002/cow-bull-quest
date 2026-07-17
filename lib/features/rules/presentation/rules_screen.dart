@@ -175,6 +175,105 @@ class RulesScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),
+              _SectionHeading('Daily Streak'),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Complete at least one game — normal or Daily Challenge, won '
+                'or lost — on a calendar day to keep your streak going. Only '
+                'one streak day can be earned per calendar date, and your '
+                'streak is tracked locally, on this device.',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _RuleItem(
+                        icon: Icons.local_fire_department,
+                        heading: 'Wins and losses both count',
+                        explanation:
+                            'A completed game earns the day\'s streak '
+                            'whether you win or lose — only an abandoned or '
+                            'restarted game does not count.',
+                        iconColor: colorScheme.tertiary,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      const _RuleItem(
+                        icon: Icons.event_busy,
+                        heading: 'Missed days',
+                        explanation:
+                            'Missing one or more calendar days resets your '
+                            'current streak to 1 the next time you complete '
+                            'a qualifying game.',
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      const _RuleItem(
+                        icon: Icons.smartphone,
+                        heading: 'Offline and device-based',
+                        explanation:
+                            'Your streak is computed entirely on this '
+                            'device, with no internet time or server check — '
+                            'changing the device clock can affect it.',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              _SectionHeading('Daily Challenge'),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'One extra puzzle a day, using Medium rules, the same for '
+                'everyone on the same word-list version, computed entirely '
+                'offline for that calendar date.',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _RuleItem(
+                        icon: Icons.event_available,
+                        heading: 'Same puzzle for everyone',
+                        explanation:
+                            'Every player on the same app word-list version '
+                            'gets the same offline Daily Challenge word for '
+                            'a given date.',
+                        iconColor: colorScheme.tertiary,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      const _RuleItem(
+                        icon: Icons.balance,
+                        heading: 'Medium rules',
+                        explanation:
+                            'The Daily Challenge always uses Medium '
+                            'difficulty rules: a 4-letter word and one '
+                            '20-coin hint.',
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      const _RuleItem(
+                        icon: Icons.storage,
+                        heading: 'Stored only on this device',
+                        explanation:
+                            'Your Daily Challenge result is saved locally, '
+                            'never sent anywhere. Changing the device date '
+                            'can also change which puzzle "today" maps to.',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
               _SectionHeading('Examples'),
               const SizedBox(height: AppSpacing.md),
               const _RuleExample(

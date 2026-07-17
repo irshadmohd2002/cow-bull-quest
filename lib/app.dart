@@ -13,8 +13,15 @@ import 'core/persistence/shared_preferences_store.dart';
 import 'core/privacy_policy.dart' as privacy_policy_config;
 import 'core/sharing/result_share_service.dart';
 import 'core/sharing/share_plus_result_share_service.dart';
+import 'core/time/local_date.dart';
+import 'core/time/local_date_provider.dart';
+import 'features/daily_challenge/controllers/daily_challenge_controller.dart';
+import 'features/daily_challenge/models/daily_challenge_result.dart';
+import 'features/daily_challenge/services/daily_challenge_result_share_formatter.dart';
+import 'features/daily_challenge/services/daily_challenge_service.dart';
 import 'features/game/controllers/game_controller.dart';
 import 'features/game/data/asset_word_repository.dart';
+import 'features/game/data/fixed_secret_word_repository.dart';
 import 'features/game/data/word_repository.dart';
 import 'features/game/models/game_config.dart';
 import 'features/game/models/game_difficulty.dart';
@@ -22,6 +29,7 @@ import 'features/game/models/game_session.dart';
 import 'features/game/models/game_status.dart';
 import 'features/game/presentation/game_screen.dart';
 import 'features/game/services/game_engine.dart';
+import 'features/home/models/daily_challenge_card_status.dart';
 import 'features/home/presentation/home_screen.dart';
 import 'features/rules/presentation/rules_screen.dart';
 import 'features/settings/presentation/settings_screen.dart';
@@ -32,7 +40,10 @@ import 'features/statistics/data/statistics_repository.dart';
 import 'features/statistics/models/completed_game.dart';
 import 'features/statistics/models/game_outcome.dart';
 import 'features/statistics/presentation/statistics_screen.dart';
+import 'features/streak/controllers/streak_controller.dart';
+import 'features/streak/models/streak_update_result.dart';
 import 'models/difficulty_selection.dart';
+import 'models/streak_feedback.dart';
 import 'theme/app_theme.dart';
 
 /// Maps the `home` feature's neutral [DifficultyOption] onto the `game`
@@ -108,12 +119,16 @@ class CowBullApp extends StatefulWidget {
     this.coinWallet,
     this.audioFeedbackSettings,
     this.audioFeedback,
+    this.streakController,
+    this.dailyChallengeController,
+    LocalDateProvider? clock,
     String? privacyPolicyUrl,
     UrlLauncher? urlLauncher,
   }) : wordRepository = wordRepository ?? AssetWordRepository(),
        statisticsRepository =
            statisticsRepository ??
            LocalStatisticsRepository(store: const SharedPreferencesStore()),
+       clock = clock ?? const SystemLocalDateProvider(),
        privacyPolicyUrl =
            privacyPolicyUrl ?? privacy_policy_config.privacyPolicyUrl,
        urlLauncher = urlLauncher ?? _launchUrlExternally;
@@ -160,6 +175,26 @@ class CowBullApp extends StatefulWidget {
   /// [settings].
   final AudioFeedbackCoordinator? audioFeedback;
 
+  /// An externally-owned daily-play-streak controller, or `null` to let this
+  /// widget create its own **non-persistent, in-memory only** fallback — the
+  /// exact same fallback semantics as [settings] (see its doc above). When
+  /// non-null, the caller retains ownership. The real, persistent app entry
+  /// point always injects an `AppBootstrap`-loaded controller.
+  final StreakController? streakController;
+
+  /// An externally-owned "today's Daily Challenge" controller, or `null` to
+  /// let this widget create its own non-persistent, in-memory only fallback
+  /// — the same semantics as [streakController]. When non-null, the caller
+  /// retains ownership.
+  final DailyChallengeController? dailyChallengeController;
+
+  /// The single source of "today" this widget uses wherever it needs the
+  /// current calendar date (seeding [streakController]/
+  /// [dailyChallengeController]'s own fallbacks, and starting a new Daily
+  /// Challenge). Defaults to [SystemLocalDateProvider] (the device's real
+  /// local clock); overridable so tests can inject a fixed/fake clock.
+  final LocalDateProvider clock;
+
   /// The privacy-policy URL Settings' "Privacy Policy" item opens, or
   /// `null` to use the app's single, centrally-configured
   /// `core/privacy_policy.dart#privacyPolicyUrl`. Overridable only so tests
@@ -185,6 +220,17 @@ class _CowBullAppState extends State<CowBullApp> {
   /// instance is shared across every [GameScreen] this state creates rather
   /// than owned per-game.
   static const ResultShareService _shareService = SharePlusResultShareService();
+
+  /// Deterministically selects the Daily Challenge secret word. Stateless
+  /// and pure, so a single `const` instance is reused for every Daily
+  /// Challenge start rather than constructed per call.
+  static const DailyChallengeService _dailyChallengeService =
+      DailyChallengeService();
+
+  /// Formats an official Daily Challenge result into shareable text.
+  /// Stateless and pure, mirroring [_shareService]'s reuse pattern.
+  static const DailyChallengeResultShareFormatter
+  _dailyChallengeShareFormatter = DailyChallengeResultShareFormatter();
 
   /// The settings instance actually in use — either [CowBullApp.settings]
   /// verbatim, or one freshly created here (non-persistent — see the
@@ -235,6 +281,25 @@ class _CowBullAppState extends State<CowBullApp> {
   /// instance the caller retains ownership of.
   late final bool _ownsAudioFeedback;
 
+  /// The daily-play-streak controller actually in use. Resolved once in
+  /// [initState], mirroring [_settings]: shared by [HomeScreen]'s streak
+  /// display, the Statistics screen's streak card, and every completed
+  /// game's streak recording, so they always agree.
+  late final StreakController _streakController;
+
+  /// Whether this state created [_streakController] itself and therefore
+  /// must dispose it. `false` when it is an externally-injected instance.
+  late final bool _ownsStreakController;
+
+  /// The "today's Daily Challenge" controller actually in use. Resolved once
+  /// in [initState], mirroring [_streakController].
+  late final DailyChallengeController _dailyChallengeController;
+
+  /// Whether this state created [_dailyChallengeController] itself and
+  /// therefore must dispose it. `false` when it is an externally-injected
+  /// instance.
+  late final bool _ownsDailyChallengeController;
+
   /// The single [StatisticsController] for the app's lifetime, wrapping
   /// [CowBullApp.statisticsRepository]. Always created and disposed by this
   /// state — unlike [_settings], there is no externally-injected seam for
@@ -284,6 +349,22 @@ class _CowBullAppState extends State<CowBullApp> {
     _statisticsController = StatisticsController(
       repository: widget.statisticsRepository,
     );
+    final injectedStreakController = widget.streakController;
+    if (injectedStreakController != null) {
+      _streakController = injectedStreakController;
+      _ownsStreakController = false;
+    } else {
+      _streakController = StreakController(clock: widget.clock);
+      _ownsStreakController = true;
+    }
+    final injectedDailyChallengeController = widget.dailyChallengeController;
+    if (injectedDailyChallengeController != null) {
+      _dailyChallengeController = injectedDailyChallengeController;
+      _ownsDailyChallengeController = false;
+    } else {
+      _dailyChallengeController = DailyChallengeController(clock: widget.clock);
+      _ownsDailyChallengeController = true;
+    }
   }
 
   @override
@@ -292,6 +373,8 @@ class _CowBullAppState extends State<CowBullApp> {
     if (_ownsCoinWallet) _coinWallet.dispose();
     if (_ownsAudioFeedback) _audioFeedback.dispose();
     if (_ownsAudioFeedbackSettings) _audioFeedbackSettings.dispose();
+    if (_ownsStreakController) _streakController.dispose();
+    if (_ownsDailyChallengeController) _dailyChallengeController.dispose();
     _statisticsController.dispose();
     super.dispose();
   }
@@ -321,25 +404,115 @@ class _CowBullAppState extends State<CowBullApp> {
       wordLength: GameConfig.visibleWordLength,
       difficulty: _toGameDifficulty(difficulty),
     );
+    final streakFeedback = ValueNotifier<StreakFeedback?>(null);
+    final controller = GameController(
+      wordRepository: widget.wordRepository,
+      gameEngine: _gameEngine,
+      coinWallet: _coinWallet,
+      feedback: _audioFeedback,
+      onGameCompleted: (completionId, session) => _recordCompletedGame(
+        id: completionId,
+        config: config,
+        difficulty: difficulty,
+        session: session,
+        streakFeedback: streakFeedback,
+      ),
+    );
     unawaited(
       _pushOnce(
         context,
-        (_) => GameScreen(
-          config: config,
-          controller: GameController(
-            wordRepository: widget.wordRepository,
-            gameEngine: _gameEngine,
-            coinWallet: _coinWallet,
-            feedback: _audioFeedback,
-            onGameCompleted: (completionId, session) => _recordCompletedGame(
-              id: completionId,
-              config: config,
-              difficulty: difficulty,
-              session: session,
-            ),
+        // Wrapped in a ListenableBuilder over _streakController (rather than
+        // reading its state once, here, before the game even starts) so
+        // GameScreen.currentStreak — used only by its *default* Share/Copy
+        // text — reflects the streak as of this game's own completion, not
+        // whatever it was the moment the player tapped Start Game.
+        (_) => ListenableBuilder(
+          listenable: _streakController,
+          builder: (context, _) => GameScreen(
+            config: config,
+            controller: controller,
+            onButtonTap: _audioFeedback.playButtonTap,
+            shareService: _shareService,
+            streakFeedback: streakFeedback,
+            currentStreak: _streakController.state.currentStreak,
           ),
-          onButtonTap: _audioFeedback.playButtonTap,
-          shareService: _shareService,
+        ),
+      ),
+    );
+  }
+
+  /// Starts today's Daily Challenge: a 4-letter, Medium-difficulty,
+  /// 10-attempt game whose secret word is deterministically selected for
+  /// today's date (see [DailyChallengeService]) — the same word for every
+  /// player on this word-list version, entirely offline.
+  ///
+  /// Reuses [GameController]/[GameConfig] exactly like [_startGame]; the
+  /// only difference is the secret word is wrapped in a
+  /// [FixedSecretWordRepository] rather than left to
+  /// [WordRepository.selectSecretWord]'s own random choice, and completion
+  /// is recorded through [_recordDailyChallengeCompletion] instead of
+  /// [_recordCompletedGame]. [_dailyChallengeController.refresh] is awaited
+  /// first so a session spanning a midnight rollover always starts the
+  /// challenge for the *current* date, not a stale cached one.
+  ///
+  /// Replaying after completion is allowed (see `DailyChallengeController`'s
+  /// class-level doc): [_recordDailyChallengeCompletion] is safe to call
+  /// again for the same date because both the streak and the official
+  /// result are idempotent per calendar day — a replay's completion changes
+  /// neither.
+  Future<void> _startDailyChallenge(BuildContext context) async {
+    _audioFeedback.playButtonTap();
+    await _dailyChallengeController.refresh();
+    if (!context.mounted) return;
+
+    final today = _dailyChallengeController.today;
+    final pool = await widget.wordRepository.loadSecretWords(
+      DailyChallengeService.wordLength,
+      GameDifficulty.common,
+    );
+    if (!context.mounted) return;
+    final secretWord = _dailyChallengeService.secretWordFor(today, pool);
+
+    final config = GameConfig.forSelection(
+      wordLength: DailyChallengeService.wordLength,
+      difficulty: GameDifficulty.common,
+    );
+    final dailyWordRepository = FixedSecretWordRepository(
+      delegate: widget.wordRepository,
+      secretWord: secretWord,
+    );
+    final streakFeedback = ValueNotifier<StreakFeedback?>(null);
+    late final GameController controller;
+    controller = GameController(
+      wordRepository: dailyWordRepository,
+      gameEngine: _gameEngine,
+      coinWallet: _coinWallet,
+      feedback: _audioFeedback,
+      onGameCompleted: (completionId, session) =>
+          _recordDailyChallengeCompletion(
+            date: today,
+            session: session,
+            hintsUsed: controller.hintsUsedThisGame,
+            streakFeedback: streakFeedback,
+          ),
+    );
+    unawaited(
+      _pushOnce(
+        context,
+        (_) => ListenableBuilder(
+          listenable: Listenable.merge([
+            _streakController,
+            _dailyChallengeController,
+          ]),
+          builder: (context, _) => GameScreen(
+            config: config,
+            controller: controller,
+            onButtonTap: _audioFeedback.playButtonTap,
+            shareService: _shareService,
+            streakFeedback: streakFeedback,
+            resultTextBuilder: (state, hintsUsed) =>
+                _formatDailyChallengeShareText(),
+          ),
         ),
       ),
     );
@@ -360,6 +533,12 @@ class _CowBullAppState extends State<CowBullApp> {
     _isNavigating = true;
     try {
       await Navigator.of(context).push(MaterialPageRoute(builder: builder));
+      // Re-derives "today" for the Daily Challenge card every time the
+      // player returns to Home from any pushed screen — a cheap no-op
+      // whenever the calendar date hasn't changed, but what keeps a
+      // long-lived session that happens to cross midnight showing the
+      // correct date/status rather than a stale cached one.
+      unawaited(_dailyChallengeController.refresh());
     } finally {
       _isNavigating = false;
     }
@@ -374,11 +553,19 @@ class _CowBullAppState extends State<CowBullApp> {
   /// [StatisticsRepository.recordCompletedGame]'s own duplicate-ID guard
   /// protects against this exact call somehow firing twice for the same
   /// session.
+  ///
+  /// Also records today's qualifying streak completion (see
+  /// [_recordStreakQualifyingCompletion]) — a normal game and the Daily
+  /// Challenge both funnel into the same streak call, so completing either
+  /// one first on a given day is what actually earns that day's streak; the
+  /// other later that same day is naturally a no-op via
+  /// `StreakController`'s own same-day dedupe.
   void _recordCompletedGame({
     required String id,
     required GameConfig config,
     required DifficultyOption difficulty,
     required GameSession session,
+    required ValueNotifier<StreakFeedback?> streakFeedback,
   }) {
     final outcome = session.status == GameStatus.won
         ? GameOutcome.won
@@ -396,7 +583,128 @@ class _CowBullAppState extends State<CowBullApp> {
         ),
       ),
     );
+    _recordStreakQualifyingCompletion(streakFeedback);
   }
+
+  /// Maps a just-finished Daily Challenge [session] onto a neutral
+  /// [DailyChallengeResult] and hands it to
+  /// [DailyChallengeController.recordIfFirst], which itself only ever keeps
+  /// the *first* completion for [date] as official — a later completion
+  /// (a practice replay) is a safe no-op here. Also records today's
+  /// qualifying streak completion, exactly like [_recordCompletedGame].
+  void _recordDailyChallengeCompletion({
+    required LocalDate date,
+    required GameSession session,
+    required int hintsUsed,
+    required ValueNotifier<StreakFeedback?> streakFeedback,
+  }) {
+    final guesses = [
+      for (final guess in session.guesses)
+        DailyChallengeGuessRecord(
+          turnNumber: guess.turnNumber,
+          bulls: guess.result.bulls,
+          cows: guess.result.cows,
+        ),
+    ];
+    _dailyChallengeController.recordIfFirst(
+      DailyChallengeResult(
+        date: date,
+        won: session.status == GameStatus.won,
+        attemptsUsed: session.attemptsUsed,
+        maxAttempts: session.maxAttempts,
+        hintsUsed: hintsUsed,
+        completedAt: DateTime.now(),
+        wordListVersion: DailyChallengeService.wordListVersion,
+        guesses: guesses,
+      ),
+    );
+    _recordStreakQualifyingCompletion(streakFeedback);
+  }
+
+  /// Records today's qualifying streak completion and reports the outcome
+  /// through [streakFeedback] (read by [GameScreen]'s completed view) so
+  /// every completion path — normal game or Daily Challenge — shows
+  /// identical streak feedback. Fires [AudioFeedbackCoordinator.onStreakUpdated]
+  /// (a haptic only, no sound) exactly when the streak was genuinely started
+  /// or extended — never when today was already counted, matching the
+  /// milestone's "do not trigger streak feedback when the same day was
+  /// already counted" rule.
+  void _recordStreakQualifyingCompletion(
+    ValueNotifier<StreakFeedback?> streakFeedback,
+  ) {
+    final result = _streakController.recordQualifyingCompletion();
+    streakFeedback.value = _toStreakFeedback(result);
+    if (result is! StreakAlreadyCounted) {
+      _audioFeedback.onStreakUpdated();
+    }
+  }
+
+  /// Maps `features/streak`'s own [StreakUpdateResult] onto the
+  /// presentation-safe, shared [StreakFeedback] — the only representation
+  /// the `game` feature (which must never import `streak` directly) is ever
+  /// handed. Mirrors [_toGameDifficulty]'s role for [DifficultyOption].
+  StreakFeedback _toStreakFeedback(StreakUpdateResult result) => StreakFeedback(
+    kind: switch (result) {
+      StreakStarted() => StreakFeedbackKind.started,
+      StreakExtended() => StreakFeedbackKind.extended,
+      StreakAlreadyCounted() => StreakFeedbackKind.alreadyCounted,
+    },
+    currentStreak: result.state.currentStreak,
+  );
+
+  /// Builds the Share/Copy text for a Daily Challenge's completed view,
+  /// always from [DailyChallengeController.officialResultToday] — the
+  /// official, first-completion result — never from a live (possibly
+  /// replayed) session, satisfying "a replay must still share the official
+  /// result". `officialResultToday` is guaranteed non-null by the time this
+  /// can run: [GameScreen] only reaches its completed view, where Share/Copy
+  /// become reachable at all, after `onGameCompleted` has already
+  /// synchronously called [_recordDailyChallengeCompletion] (which itself
+  /// calls `recordIfFirst` synchronously in-memory) for this exact
+  /// completion or an earlier one today.
+  String _formatDailyChallengeShareText() {
+    final official = _dailyChallengeController.officialResultToday;
+    if (official == null) {
+      // Defensive fallback only; not reachable in normal operation (see the
+      // doc above).
+      return 'Cow Bull Quest — Daily Challenge';
+    }
+    return _dailyChallengeShareFormatter.format(
+      result: official,
+      currentStreak: _streakController.state.currentStreak,
+    );
+  }
+
+  /// The Daily Challenge card's display state, derived from
+  /// [DailyChallengeController.officialResultToday].
+  DailyChallengeCardStatus _dailyChallengeCardStatus() {
+    final result = _dailyChallengeController.officialResultToday;
+    if (result == null) return DailyChallengeCardStatus.notPlayed;
+    return result.won
+        ? DailyChallengeCardStatus.completedWon
+        : DailyChallengeCardStatus.completedNotSolved;
+  }
+
+  static const List<String> _monthNames = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+
+  /// A short, human-readable label for [date] (e.g. "18 July 2026"), shown
+  /// on the Daily Challenge card. No `intl` dependency: this app only ever
+  /// needs this one fixed English format.
+  String _formatDate(LocalDate date) =>
+      '${date.day} ${_monthNames[date.month - 1]} ${date.year}';
 
   void _openRules(BuildContext context) {
     _audioFeedback.playButtonTap();
@@ -479,10 +787,15 @@ class _CowBullAppState extends State<CowBullApp> {
       _pushOnce(
         context,
         (_) => ListenableBuilder(
-          listenable: _statisticsController,
+          listenable: Listenable.merge([
+            _statisticsController,
+            _streakController,
+          ]),
           builder: (context, _) => StatisticsScreen(
             state: _statisticsController.state,
             onClearStatistics: _statisticsController.clear,
+            currentStreak: _streakController.state.currentStreak,
+            longestStreak: _streakController.state.longestStreak,
           ),
         ),
       ),
@@ -500,13 +813,25 @@ class _CowBullAppState extends State<CowBullApp> {
         themeMode: _settings.themeMode,
         home: Builder(
           builder: (context) => ListenableBuilder(
-            listenable: _coinWallet,
+            listenable: Listenable.merge([
+              _coinWallet,
+              _streakController,
+              _dailyChallengeController,
+            ]),
             builder: (context, _) => HomeScreen(
               onStartGame: (difficulty) => _startGame(context, difficulty),
               onOpenRules: () => _openRules(context),
               onOpenSettings: () => _openSettings(context),
               onOpenStatistics: () => _openStatistics(context),
+              onOpenDailyChallenge: () =>
+                  unawaited(_startDailyChallenge(context)),
               coinBalance: _coinWallet.balance,
+              currentStreak: _streakController.state.currentStreak,
+              longestStreak: _streakController.state.longestStreak,
+              dailyChallengeStatus: _dailyChallengeCardStatus(),
+              dailyChallengeDateLabel: _formatDate(
+                _dailyChallengeController.today,
+              ),
               onDifficultySelected: (_) =>
                   _audioFeedback.onDifficultySelected(),
             ),

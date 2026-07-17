@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../models/difficulty_selection.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_spacing.dart';
+import '../../../theme/app_status_colors.dart';
 import '../../../widgets/coin_balance_badge.dart';
+import '../models/daily_challenge_card_status.dart';
 
 /// Concise, human-facing label for [option]. Presentation-layer concern —
 /// [DifficultyOption] itself carries no human-facing text. The internal
@@ -66,6 +68,11 @@ class HomeScreen extends StatefulWidget {
     required this.onOpenSettings,
     required this.onOpenStatistics,
     required this.coinBalance,
+    required this.currentStreak,
+    required this.longestStreak,
+    required this.dailyChallengeStatus,
+    required this.dailyChallengeDateLabel,
+    required this.onOpenDailyChallenge,
     this.onDifficultySelected,
   });
 
@@ -92,6 +99,29 @@ class HomeScreen extends StatefulWidget {
   /// presentational; the app-level composition root owns listening to the
   /// wallet and rebuilding this screen when it changes.
   final int coinBalance;
+
+  /// The player's current daily-play streak, in days. `0` for a brand-new
+  /// player or one whose streak has lapsed — rendered with friendly,
+  /// non-punitive copy (see [_StreakSummaryRow]), never as an error or
+  /// warning state.
+  final int currentStreak;
+
+  /// The longest streak ever reached, shown less prominently alongside
+  /// [currentStreak].
+  final int longestStreak;
+
+  /// Today's Daily Challenge completion state, for the Daily Challenge
+  /// card.
+  final DailyChallengeCardStatus dailyChallengeStatus;
+
+  /// A short, human-readable label for today's date (e.g. "18 July 2026"),
+  /// shown on the Daily Challenge card. Formatted by the app-level
+  /// composition root so this screen never needs its own date-formatting
+  /// logic or an `intl` dependency.
+  final String dailyChallengeDateLabel;
+
+  /// Called when the player taps the Daily Challenge card.
+  final VoidCallback onOpenDailyChallenge;
 
   /// Called with the newly-chosen difficulty whenever the player picks a
   /// different segment, or `null` to report nothing. Deliberately generic —
@@ -143,6 +173,17 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const _HomeHeroCard(),
+              const SizedBox(height: AppSpacing.md),
+              _StreakSummaryRow(
+                currentStreak: widget.currentStreak,
+                longestStreak: widget.longestStreak,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _DailyChallengeCard(
+                dateLabel: widget.dailyChallengeDateLabel,
+                status: widget.dailyChallengeStatus,
+                onTap: widget.onOpenDailyChallenge,
+              ),
               const SizedBox(height: AppSpacing.lg),
               Text(
                 'Guess the secret word. Each guess earns a bull for every '
@@ -389,6 +430,180 @@ class _SegmentLabel extends StatelessWidget {
         softWrap: false,
         overflow: TextOverflow.visible,
         style: Theme.of(context).textTheme.labelMedium,
+      ),
+    );
+  }
+}
+
+/// A compact row showing the player's current daily-play streak with a
+/// flame icon, and the longest streak ever reached in a smaller, less
+/// prominent line beneath it.
+///
+/// A zero streak is deliberately never styled as an error/warning — no red,
+/// no "broken" iconography. Always uses the same rounded flame glyph
+/// (rather than switching to an outlined variant for zero, the way
+/// [_difficultyIcon] does for the difficulty selector) specifically so it
+/// never collides with the Hard-difficulty segment's own
+/// `Icons.local_fire_department`/`Icons.local_fire_department_outlined`
+/// icons elsewhere on this same screen; the muted color plus the
+/// always-visible "N-day streak" text is what distinguishes a zero streak,
+/// never color alone.
+class _StreakSummaryRow extends StatelessWidget {
+  const _StreakSummaryRow({
+    required this.currentStreak,
+    required this.longestStreak,
+  });
+
+  final int currentStreak;
+  final int longestStreak;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+    final statusColors = Theme.of(context).extension<AppStatusColors>();
+    final active = currentStreak > 0;
+    final flameColor = active
+        ? (statusColors?.success ?? colorScheme.tertiary)
+        : colorScheme.onSurfaceVariant;
+
+    return Semantics(
+      container: true,
+      label:
+          '$currentStreak-day streak. '
+          'Best: ${_dayCount(longestStreak)}.',
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            Icon(
+              Icons.local_fire_department_rounded,
+              color: flameColor,
+              size: 26,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$currentStreak-day streak',
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  'Best: ${_dayCount(longestStreak)}',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _dayCount(int days) => '$days ${days == 1 ? 'day' : 'days'}';
+}
+
+/// The map from [DailyChallengeCardStatus] to its short trailing-chip label.
+String _dailyChallengeStatusLabel(DailyChallengeCardStatus status) =>
+    switch (status) {
+      DailyChallengeCardStatus.notPlayed => 'Not played',
+      DailyChallengeCardStatus.completedWon => 'Completed · Won',
+      DailyChallengeCardStatus.completedNotSolved => 'Completed · Not solved',
+    };
+
+/// A single, clearly-labelled entry point to the Daily Challenge: today's
+/// date, a completion-state chip, and — for a completed challenge — the
+/// outcome, never the secret word.
+class _DailyChallengeCard extends StatelessWidget {
+  const _DailyChallengeCard({
+    required this.dateLabel,
+    required this.status,
+    required this.onTap,
+  });
+
+  final String dateLabel;
+  final DailyChallengeCardStatus status;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+    final statusColors = Theme.of(context).extension<AppStatusColors>();
+    final completed = status != DailyChallengeCardStatus.notPlayed;
+    final won = status == DailyChallengeCardStatus.completedWon;
+    final statusLabel = _dailyChallengeStatusLabel(status);
+    final chipColor = won
+        ? (statusColors?.success ?? colorScheme.tertiary)
+        : (completed ? colorScheme.secondary : colorScheme.onSurfaceVariant);
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Semantics(
+          button: true,
+          label: 'Daily Challenge, $dateLabel. $statusLabel.',
+          child: ExcludeSemantics(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: [
+                  Icon(
+                    completed ? Icons.event_available : Icons.event,
+                    color: colorScheme.primary,
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Daily Challenge', style: textTheme.titleMedium),
+                        const SizedBox(height: AppSpacing.xs / 2),
+                        Text(
+                          dateLabel,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                        vertical: AppSpacing.xs / 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: chipColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: chipColor),
+                      ),
+                      child: Text(
+                        statusLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.labelSmall?.copyWith(
+                          color: chipColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

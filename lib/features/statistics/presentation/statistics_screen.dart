@@ -9,6 +9,7 @@ import '../models/statistics_snapshot.dart';
 import 'widgets/recent_games_list.dart';
 import 'widgets/statistics_breakdown_section.dart';
 import 'widgets/statistics_summary_card.dart';
+import 'widgets/streak_summary_card.dart';
 
 /// The secret-word lengths shown in the by-length breakdown, in display
 /// order. Kept local to presentation, like [_difficultyLabel] below — the
@@ -71,6 +72,8 @@ class StatisticsScreen extends StatelessWidget {
     super.key,
     required this.state,
     required this.onClearStatistics,
+    required this.currentStreak,
+    required this.longestStreak,
   });
 
   /// The current statistics lifecycle state to render.
@@ -78,6 +81,13 @@ class StatisticsScreen extends StatelessWidget {
 
   /// Called after the player confirms the clear-statistics dialog.
   final VoidCallback onClearStatistics;
+
+  /// The player's current/longest daily-play streak — always available
+  /// (independent of [state]'s own load lifecycle, since streak data is
+  /// loaded eagerly at app startup), so it is shown even while [state] is
+  /// still [StatisticsLoading] or has failed to load.
+  final int currentStreak;
+  final int longestStreak;
 
   @override
   Widget build(BuildContext context) {
@@ -95,7 +105,17 @@ class StatisticsScreen extends StatelessWidget {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.screenPadding),
-          child: _buildBody(context, state),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              StreakSummaryCard(
+                currentStreak: currentStreak,
+                longestStreak: longestStreak,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _buildBody(context, state),
+            ],
+          ),
         ),
       ),
     );

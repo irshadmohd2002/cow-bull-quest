@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/sharing/result_share_service.dart';
 import '../../../core/sharing/share_plus_result_share_service.dart';
+import '../../../models/streak_feedback.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_spacing.dart';
 import '../../../theme/app_status_colors.dart';
@@ -25,6 +26,19 @@ import 'widgets/hint_section.dart';
 /// pure, so a single module-level instance is reused for every share/copy
 /// request rather than constructed per call.
 const GameResultShareFormatter _resultFormatter = GameResultShareFormatter();
+
+/// Overrides how a completed game's Share/Copy text is built, in place of
+/// the default [_resultFormatter] call.
+///
+/// Exists solely so the Daily Challenge can share/copy its *official*
+/// result — even when the live [state]/[hintsUsed] belong to a practice
+/// replay — without [GameScreen] needing to know anything about Daily
+/// Challenges, official results, or replays at all: the app-level
+/// composition root supplies a builder that ignores [state]/[hintsUsed]
+/// entirely and formats the cached official result instead (see app.dart).
+/// `null` (the default for every normal game) preserves this screen's
+/// original behavior exactly.
+typedef ResultTextBuilder = String Function(GameCompleted state, int hintsUsed);
 
 /// The snack-bar shown when [ResultShareService.shareText] throws. Never
 /// exposes the underlying error — sharing failure is not a debugging
@@ -79,6 +93,9 @@ class GameScreen extends StatefulWidget {
     required this.config,
     this.onButtonTap,
     this.shareService = const SharePlusResultShareService(),
+    this.streakFeedback,
+    this.currentStreak,
+    this.resultTextBuilder,
   });
 
   /// The controller for this game flow. Owned by this screen.
@@ -98,6 +115,29 @@ class GameScreen extends StatefulWidget {
   /// the real, `share_plus`-backed implementation; tests substitute a fake so
   /// no platform channel is ever touched.
   final ResultShareService shareService;
+
+  /// Set exactly once, synchronously, by the app-level composition root at
+  /// the moment this game's completion is recorded (see
+  /// `GameController.onGameCompleted`) — `null` until then. When the
+  /// completed view renders, a non-null, non-"already counted" value shows a
+  /// restrained, one-time entrance animation alongside streak text (see
+  /// [StreakFeedback]); the animation is keyed off the specific
+  /// [GameCompleted] instance, so it never replays on an unrelated rebuild.
+  /// `null` throughout (the default) simply renders no streak feedback at
+  /// all — existing callers/tests that don't care about streaks are
+  /// unaffected.
+  final ValueNotifier<StreakFeedback?>? streakFeedback;
+
+  /// The player's current streak length, included in the *default*
+  /// Share/Copy text (see [_resultFormatter]) when positive. Ignored
+  /// whenever [resultTextBuilder] is supplied, since that builder owns the
+  /// entire share text itself. `null` (the default) omits the streak line
+  /// entirely, exactly matching this screen's original share/copy behavior.
+  final int? currentStreak;
+
+  /// Overrides how the completed view's Share/Copy text is built. See
+  /// [ResultTextBuilder]'s own doc for why this exists.
+  final ResultTextBuilder? resultTextBuilder;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -239,11 +279,7 @@ class _GameScreenState extends State<GameScreen> {
     widget.onButtonTap?.call();
     setState(() => _sharing = true);
     try {
-      final text = _resultFormatter.format(
-        session: state.session,
-        difficulty: widget.config.difficulty,
-        hintsUsed: hintsUsed,
-      );
+      final text = _buildResultText(state, hintsUsed);
       await widget.shareService.shareText(
         text: text,
         subject: 'My Cow Bull Quest result',
@@ -264,15 +300,26 @@ class _GameScreenState extends State<GameScreen> {
   /// confirmation. Shares the exact same privacy-safe text [_handleShare]
   /// sends to the system share sheet.
   void _handleCopy(GameCompleted state, int hintsUsed) {
-    final text = _resultFormatter.format(
-      session: state.session,
-      difficulty: widget.config.difficulty,
-      hintsUsed: hintsUsed,
-    );
+    final text = _buildResultText(state, hintsUsed);
     unawaited(Clipboard.setData(ClipboardData(text: text)));
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Result copied.')));
+  }
+
+  /// Builds the Share/Copy text for [state]: [GameScreen.resultTextBuilder]
+  /// when supplied, otherwise the default [_resultFormatter] call using this
+  /// screen's own live session/difficulty/hints and
+  /// [GameScreen.currentStreak].
+  String _buildResultText(GameCompleted state, int hintsUsed) {
+    final builder = widget.resultTextBuilder;
+    if (builder != null) return builder(state, hintsUsed);
+    return _resultFormatter.format(
+      session: state.session,
+      difficulty: widget.config.difficulty,
+      hintsUsed: hintsUsed,
+      currentStreak: widget.currentStreak,
+    );
   }
 
   @override
@@ -325,6 +372,7 @@ class _GameScreenState extends State<GameScreen> {
         state: state,
         hintsUsed: widget.controller.hintsUsedThisGame,
         sharing: _sharing,
+        streakFeedback: widget.streakFeedback?.value,
         onRestart: _handleRestart,
         onReturnHome: _handleReturnHome,
         onShare: () =>
@@ -540,6 +588,7 @@ class _CompletedGameView extends StatelessWidget {
     required this.state,
     required this.hintsUsed,
     required this.sharing,
+    this.streakFeedback,
     required this.onRestart,
     required this.onReturnHome,
     required this.onShare,
@@ -554,6 +603,10 @@ class _CompletedGameView extends StatelessWidget {
   /// Whether a share request is currently in flight — disables Share Result
   /// so a rapid double-tap cannot open two overlapping share sheets.
   final bool sharing;
+
+  /// What happened to the streak as a result of this completion, or `null`
+  /// to show no streak feedback at all. See [GameScreen.streakFeedback].
+  final StreakFeedback? streakFeedback;
   final VoidCallback onRestart;
   final VoidCallback onReturnHome;
   final VoidCallback onShare;
@@ -650,6 +703,13 @@ class _CompletedGameView extends StatelessWidget {
                   ),
                 ),
               ),
+              if (streakFeedback != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                _StreakFeedbackBanner(
+                  feedback: streakFeedback!,
+                  animationKey: state,
+                ),
+              ],
               const SizedBox(height: AppSpacing.lg),
               GuessHistory(guesses: session.guesses, shrinkWrap: true),
               const SizedBox(height: AppSpacing.lg),
@@ -704,6 +764,93 @@ class _CompletedGameView extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Shows what happened to the streak as a result of a completed game:
+/// "Streak started: 1 day", "Streak extended: 4 days", or "Today already
+/// counted · 4-day streak".
+///
+/// A newly-started or newly-extended streak plays a restrained, one-time
+/// fade+scale entrance animation, keyed by [animationKey] (the specific
+/// [GameCompleted] instance this feedback belongs to) so the animation never
+/// replays on an unrelated rebuild that leaves [animationKey] unchanged —
+/// only a genuinely new completion (a new [GameCompleted] instance) can ever
+/// retrigger it. "Already counted" today never animates — see the
+/// milestone's own "do not trigger streak feedback when the same day was
+/// already counted" rule; any haptic for a genuine start/extend is fired
+/// once by the app-level composition root at the moment of completion, not
+/// by this purely-visual widget.
+class _StreakFeedbackBanner extends StatelessWidget {
+  const _StreakFeedbackBanner({
+    required this.feedback,
+    required this.animationKey,
+  });
+
+  final StreakFeedback feedback;
+  final Object animationKey;
+
+  String get _text {
+    final days = feedback.currentStreak;
+    final dayWord = days == 1 ? 'day' : 'days';
+    return switch (feedback.kind) {
+      StreakFeedbackKind.started => 'Streak started: $days $dayWord',
+      StreakFeedbackKind.extended => 'Streak extended: $days $dayWord',
+      StreakFeedbackKind.alreadyCounted =>
+        'Today already counted · $days-day streak',
+    };
+  }
+
+  bool get _isReward => feedback.kind != StreakFeedbackKind.alreadyCounted;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final statusColors = Theme.of(context).extension<AppStatusColors>();
+    final iconColor = _isReward
+        ? (statusColors?.success ?? colorScheme.tertiary)
+        : colorScheme.tertiary;
+    final text = _text;
+
+    final content = Semantics(
+      label: text,
+      child: ExcludeSemantics(
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: colorScheme.outlineVariant),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.local_fire_department, size: 20, color: iconColor),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(child: Text(text)),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!_isReward) return content;
+
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(animationKey),
+      tween: Tween(begin: 0, end: 1),
+      duration: AppMotion.durationFor(context, AppMotion.entrance),
+      curve: AppMotion.curve,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.scale(scale: 0.85 + (0.15 * t), child: child),
+      ),
+      child: content,
     );
   }
 }

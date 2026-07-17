@@ -7,15 +7,20 @@ import 'package:cowbullgame/audio_feedback_coordinator.dart';
 import 'package:cowbullgame/audio_feedback_settings.dart';
 import 'package:cowbullgame/coin_wallet.dart';
 import 'package:cowbullgame/core/persistence/storage_keys.dart';
+import 'package:cowbullgame/core/time/local_date.dart';
+import 'package:cowbullgame/features/daily_challenge/controllers/daily_challenge_controller.dart';
+import 'package:cowbullgame/features/streak/controllers/streak_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_audio_service.dart';
 import 'support/fake_haptic_service.dart';
+import 'support/fake_local_date_provider.dart';
 import 'support/fake_preferences_store.dart';
 import 'support/fake_statistics_repository.dart';
 
 Future<AppBootstrap> _succeedingLoader() async {
   final audioFeedbackSettings = AudioFeedbackSettings();
+  final clock = FakeLocalDateProvider(LocalDate(year: 2026, month: 7, day: 18));
   return AppBootstrap(
     settings: AppSettings(),
     statisticsRepository: FakeStatisticsRepository(),
@@ -26,6 +31,9 @@ Future<AppBootstrap> _succeedingLoader() async {
       hapticService: FakeHapticService(),
       settings: audioFeedbackSettings,
     ),
+    clock: clock,
+    streakController: StreakController(clock: clock),
+    dailyChallengeController: DailyChallengeController(clock: clock),
   );
 }
 

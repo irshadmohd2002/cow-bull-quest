@@ -165,6 +165,36 @@ void main() {
       expect(haptics.calls, ['selectionClick']);
     });
 
+    test('onStreakUpdated triggers lightImpact and no sound effect', () {
+      final audio = FakeAudioService();
+      final haptics = FakeHapticService();
+      final coordinator = buildSubject(
+        audio: audio,
+        haptics: haptics,
+        settings: AudioFeedbackSettings(),
+      );
+      addTearDown(coordinator.dispose);
+
+      coordinator.onStreakUpdated();
+
+      expect(haptics.calls, ['lightImpact']);
+      expect(audio.calls, isEmpty);
+    });
+
+    test('disabled haptics suppress onStreakUpdated', () {
+      final haptics = FakeHapticService();
+      final coordinator = buildSubject(
+        audio: FakeAudioService(),
+        haptics: haptics,
+        settings: AudioFeedbackSettings(initialHapticsEnabled: false),
+      );
+      addTearDown(coordinator.dispose);
+
+      coordinator.onStreakUpdated();
+
+      expect(haptics.calls, isEmpty);
+    });
+
     test('onValidGuess triggers lightImpact', () {
       final haptics = FakeHapticService();
       final coordinator = buildSubject(

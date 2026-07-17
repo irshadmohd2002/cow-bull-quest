@@ -1,3 +1,4 @@
+import 'package:cowbullgame/features/home/models/daily_challenge_card_status.dart';
 import 'package:cowbullgame/features/home/presentation/home_screen.dart';
 import 'package:cowbullgame/models/difficulty_selection.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,12 @@ void main() {
     VoidCallback? onOpenSettings,
     VoidCallback? onOpenStatistics,
     int coinBalance = 100,
+    int currentStreak = 0,
+    int longestStreak = 0,
+    DailyChallengeCardStatus dailyChallengeStatus =
+        DailyChallengeCardStatus.notPlayed,
+    String dailyChallengeDateLabel = '18 July 2026',
+    VoidCallback? onOpenDailyChallenge,
     ValueChanged<DifficultyOption>? onDifficultySelected,
   }) {
     return MaterialApp(
@@ -19,6 +26,11 @@ void main() {
         onOpenSettings: onOpenSettings ?? () {},
         onOpenStatistics: onOpenStatistics ?? () {},
         coinBalance: coinBalance,
+        currentStreak: currentStreak,
+        longestStreak: longestStreak,
+        dailyChallengeStatus: dailyChallengeStatus,
+        dailyChallengeDateLabel: dailyChallengeDateLabel,
+        onOpenDailyChallenge: onOpenDailyChallenge ?? () {},
         onDifficultySelected: onDifficultySelected,
       ),
     );
@@ -488,6 +500,139 @@ void main() {
       await tester.pumpWidget(buildSubject((_) {}));
 
       await tester.tap(find.text('Easy'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Milestone 18: streak summary', () {
+    testWidgets('shows the current streak with friendly zero-streak copy', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject((_) {}, currentStreak: 0));
+      expect(find.text('0-day streak'), findsOneWidget);
+      // Never framed as an error/warning: no "broken" or negative wording.
+      expect(find.textContaining('lost'), findsNothing);
+      expect(find.textContaining('broken'), findsNothing);
+    });
+
+    testWidgets('shows a non-zero current streak', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}, currentStreak: 4));
+      expect(find.text('4-day streak'), findsOneWidget);
+    });
+
+    testWidgets(
+      'shows the longest streak less prominently, as "Best: N days"',
+      (tester) async {
+        await tester.pumpWidget(
+          buildSubject((_) {}, currentStreak: 1, longestStreak: 8),
+        );
+        expect(find.text('Best: 8 days'), findsOneWidget);
+      },
+    );
+
+    testWidgets('uses singular wording for a 1-day best streak', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        buildSubject((_) {}, currentStreak: 1, longestStreak: 1),
+      );
+      expect(find.text('Best: 1 day'), findsOneWidget);
+    });
+
+    testWidgets('exposes streak information through semantics', (tester) async {
+      await tester.pumpWidget(
+        buildSubject((_) {}, currentStreak: 4, longestStreak: 8),
+      );
+      expect(
+        find.bySemanticsLabel(RegExp('4-day streak.*Best: 8 days')),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('Milestone 18: Daily Challenge card', () {
+    testWidgets('is visible with the given date label', (tester) async {
+      await tester.pumpWidget(
+        buildSubject((_) {}, dailyChallengeDateLabel: '18 July 2026'),
+      );
+      expect(find.text('Daily Challenge'), findsOneWidget);
+      expect(find.text('18 July 2026'), findsOneWidget);
+    });
+
+    testWidgets('shows "Not played" before completion', (tester) async {
+      await tester.pumpWidget(
+        buildSubject(
+          (_) {},
+          dailyChallengeStatus: DailyChallengeCardStatus.notPlayed,
+        ),
+      );
+      expect(find.text('Not played'), findsOneWidget);
+    });
+
+    testWidgets('shows "Completed · Won" after a win', (tester) async {
+      await tester.pumpWidget(
+        buildSubject(
+          (_) {},
+          dailyChallengeStatus: DailyChallengeCardStatus.completedWon,
+        ),
+      );
+      expect(find.text('Completed · Won'), findsOneWidget);
+    });
+
+    testWidgets('shows "Completed · Not solved" after a loss', (tester) async {
+      await tester.pumpWidget(
+        buildSubject(
+          (_) {},
+          dailyChallengeStatus: DailyChallengeCardStatus.completedNotSolved,
+        ),
+      );
+      expect(find.text('Completed · Not solved'), findsOneWidget);
+    });
+
+    testWidgets('tapping the card invokes onOpenDailyChallenge exactly once', (
+      tester,
+    ) async {
+      var callCount = 0;
+      await tester.pumpWidget(
+        buildSubject((_) {}, onOpenDailyChallenge: () => callCount++),
+      );
+
+      await tester.tap(find.text('Daily Challenge'));
+      await tester.pumpAndSettle();
+
+      expect(callCount, 1);
+    });
+
+    testWidgets('does not overflow on a narrow screen', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        buildSubject(
+          (_) {},
+          currentStreak: 12,
+          longestStreak: 34,
+          dailyChallengeStatus: DailyChallengeCardStatus.completedNotSolved,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('does not overflow under large text scaling', (tester) async {
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(3)),
+          child: buildSubject(
+            (_) {},
+            currentStreak: 12,
+            longestStreak: 34,
+            dailyChallengeStatus: DailyChallengeCardStatus.completedWon,
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
