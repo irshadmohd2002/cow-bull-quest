@@ -15,6 +15,7 @@ import '../controllers/game_controller_state.dart';
 import '../models/game_config.dart';
 import '../models/game_difficulty.dart';
 import '../models/game_status.dart';
+import '../services/coin_reward_calculator.dart';
 import '../services/game_result_share_formatter.dart';
 import '../services/guess_validator.dart';
 import 'widgets/game_status_panel.dart';
@@ -94,6 +95,7 @@ class GameScreen extends StatefulWidget {
     this.onButtonTap,
     this.shareService = const SharePlusResultShareService(),
     this.streakFeedback,
+    this.coinsEarnedFeedback,
     this.currentStreak,
     this.resultTextBuilder,
   });
@@ -127,6 +129,17 @@ class GameScreen extends StatefulWidget {
   /// all — existing callers/tests that don't care about streaks are
   /// unaffected.
   final ValueNotifier<StreakFeedback?>? streakFeedback;
+
+  /// Set exactly once, synchronously, by the app-level composition root at
+  /// the same moment as [streakFeedback] (see its doc) — the itemized
+  /// Milestone 19 coin reward for this completion, or `null` for none (a
+  /// loss, an abandoned/restarted game — neither of which ever reaches this
+  /// far — or a Daily Challenge replay). When the completed view renders, a
+  /// non-null value shows a compact "Coins earned" breakdown card alongside
+  /// the outcome. `null` throughout (the default) simply shows no
+  /// coin-reward card at all — existing callers/tests that don't care about
+  /// coin rewards are unaffected.
+  final ValueNotifier<CoinRewardBreakdown?>? coinsEarnedFeedback;
 
   /// The player's current streak length, included in the *default*
   /// Share/Copy text (see [_resultFormatter]) when positive. Ignored
@@ -373,6 +386,8 @@ class _GameScreenState extends State<GameScreen> {
         hintsUsed: widget.controller.hintsUsedThisGame,
         sharing: _sharing,
         streakFeedback: widget.streakFeedback?.value,
+        coinsEarned: widget.coinsEarnedFeedback?.value,
+        difficulty: widget.config.difficulty,
         onRestart: _handleRestart,
         onReturnHome: _handleReturnHome,
         onShare: () =>
@@ -589,6 +604,8 @@ class _CompletedGameView extends StatelessWidget {
     required this.hintsUsed,
     required this.sharing,
     this.streakFeedback,
+    this.coinsEarned,
+    required this.difficulty,
     required this.onRestart,
     required this.onReturnHome,
     required this.onShare,
@@ -607,6 +624,14 @@ class _CompletedGameView extends StatelessWidget {
   /// What happened to the streak as a result of this completion, or `null`
   /// to show no streak feedback at all. See [GameScreen.streakFeedback].
   final StreakFeedback? streakFeedback;
+
+  /// The itemized coin reward earned by this completion, or `null` to show
+  /// no coin-reward card at all. See [GameScreen.coinsEarnedFeedback].
+  final CoinRewardBreakdown? coinsEarned;
+
+  /// The difficulty this game was played at, labeling
+  /// [coinsEarned]'s base-win-reward line (e.g. "Medium win").
+  final GameDifficulty difficulty;
   final VoidCallback onRestart;
   final VoidCallback onReturnHome;
   final VoidCallback onShare;
@@ -703,6 +728,13 @@ class _CompletedGameView extends StatelessWidget {
                   ),
                 ),
               ),
+              if (coinsEarned != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                _CoinRewardBreakdownCard(
+                  breakdown: coinsEarned!,
+                  difficulty: difficulty,
+                ),
+              ],
               if (streakFeedback != null) ...[
                 const SizedBox(height: AppSpacing.md),
                 _StreakFeedbackBanner(
@@ -761,6 +793,103 @@ class _CompletedGameView extends StatelessWidget {
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A compact, itemized "Coins earned" card: a bold total, then one row per
+/// non-zero [CoinRewardBreakdown] line (e.g. "Medium win +15", "No-hint
+/// bonus +5", "Daily Challenge bonus +10") — never a line for a
+/// [CoinRewardBreakdown] field that is `0`. The caller ([_CompletedGameView])
+/// never builds this widget at all for a `null`/non-rewarding breakdown, so
+/// this card itself never has to represent "nothing earned".
+///
+/// Every number is communicated as text — never by color alone — matching
+/// this project's accessibility baseline (see CLAUDE.md); the gold accent
+/// on the total is a decoration on top of that text, not a substitute for
+/// it. A single [Semantics] label reads the whole card as one sentence
+/// (total, then each line), and the underlying row widgets are excluded
+/// from the semantics tree so a screen reader never also reads each row a
+/// second time individually.
+class _CoinRewardBreakdownCard extends StatelessWidget {
+  const _CoinRewardBreakdownCard({
+    required this.breakdown,
+    required this.difficulty,
+  });
+
+  final CoinRewardBreakdown breakdown;
+  final GameDifficulty difficulty;
+
+  List<(String label, int amount)> get _lines => [
+    if (breakdown.baseWinReward > 0)
+      ('${_difficultyLabel(difficulty)} win', breakdown.baseWinReward),
+    if (breakdown.noHintBonus > 0) ('No-hint bonus', breakdown.noHintBonus),
+    if (breakdown.dailyChallengeBonus > 0)
+      ('Daily Challenge bonus', breakdown.dailyChallengeBonus),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+    final statusColors = Theme.of(context).extension<AppStatusColors>();
+    final coinAccent = statusColors?.success ?? colorScheme.primary;
+    final lines = _lines;
+
+    final semanticsLabel = StringBuffer(
+      'Coins earned: +${breakdown.totalCoinsEarned}.',
+    );
+    for (final (label, amount) in lines) {
+      semanticsLabel.write(' $label: +$amount.');
+    }
+
+    return Semantics(
+      label: semanticsLabel.toString(),
+      child: ExcludeSemantics(
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.paid, color: coinAccent, size: 20),
+                    const SizedBox(width: AppSpacing.xs),
+                    Expanded(
+                      child: Text('Coins earned', style: textTheme.titleMedium),
+                    ),
+                    Text(
+                      '+${breakdown.totalCoinsEarned}',
+                      style: textTheme.titleMedium?.copyWith(
+                        color: coinAccent,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                for (final (label, amount) in lines)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.xs),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            label,
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                        Text('+$amount', style: textTheme.bodyMedium),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

@@ -6,6 +6,9 @@ import '../controllers/statistics_controller_state.dart';
 import '../models/completed_game.dart';
 import '../models/game_outcome_breakdown.dart';
 import '../models/statistics_snapshot.dart';
+import 'widgets/coin_summary_card.dart';
+import 'widgets/daily_challenge_stats_card.dart';
+import 'widgets/hint_stats_card.dart';
 import 'widgets/recent_games_list.dart';
 import 'widgets/statistics_breakdown_section.dart';
 import 'widgets/statistics_summary_card.dart';
@@ -74,6 +77,11 @@ class StatisticsScreen extends StatelessWidget {
     required this.onClearStatistics,
     required this.currentStreak,
     required this.longestStreak,
+    required this.coinBalance,
+    required this.totalCoinsEarned,
+    required this.totalCoinsSpent,
+    required this.dailyChallengesCompleted,
+    required this.dailyChallengesWon,
   });
 
   /// The current statistics lifecycle state to render.
@@ -88,6 +96,24 @@ class StatisticsScreen extends StatelessWidget {
   /// still [StatisticsLoading] or has failed to load.
   final int currentStreak;
   final int longestStreak;
+
+  /// The player's coin economy — current balance and lifetime
+  /// earned/spent totals — shown via [CoinSummaryCard]. Always available,
+  /// mirroring [currentStreak]/[longestStreak] (`CoinWallet` is likewise
+  /// loaded eagerly at app startup), so it is shown regardless of [state].
+  final int coinBalance;
+  final int totalCoinsEarned;
+  final int totalCoinsSpent;
+
+  /// Lifetime Daily Challenge totals — shown via [DailyChallengeStatsCard].
+  /// Always available, mirroring [coinBalance] (`DailyChallengeController`
+  /// is likewise loaded eagerly at app startup), so it is shown regardless
+  /// of [state]. Not derivable from [state]'s own [StatisticsSnapshot]: a
+  /// Daily Challenge completion is never folded into the general win/loss
+  /// statistics a normal game feeds — see [DailyChallengeStatsCard]'s own
+  /// doc.
+  final int dailyChallengesCompleted;
+  final int dailyChallengesWon;
 
   @override
   Widget build(BuildContext context) {
@@ -111,6 +137,17 @@ class StatisticsScreen extends StatelessWidget {
               StreakSummaryCard(
                 currentStreak: currentStreak,
                 longestStreak: longestStreak,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              CoinSummaryCard(
+                coinBalance: coinBalance,
+                totalCoinsEarned: totalCoinsEarned,
+                totalCoinsSpent: totalCoinsSpent,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              DailyChallengeStatsCard(
+                completed: dailyChallengesCompleted,
+                won: dailyChallengesWon,
               ),
               const SizedBox(height: AppSpacing.md),
               _buildBody(context, state),
@@ -274,6 +311,8 @@ class _StatisticsContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         StatisticsSummaryCard(snapshot: snapshot),
+        const SizedBox(height: AppSpacing.md),
+        HintStatsCard(snapshot: snapshot),
         const SizedBox(height: AppSpacing.md),
         StatisticsBreakdownSection(
           title: 'By word length',

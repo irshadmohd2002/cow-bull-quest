@@ -175,6 +175,73 @@ class RulesScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),
+              _SectionHeading('Coin Rewards'),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Winning a game earns coins based on its difficulty, with '
+                'bonuses for winning without a hint. Coins and progress '
+                'never leave this device.',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _RuleItem(
+                        icon: Icons.emoji_events,
+                        heading: 'Easy win',
+                        explanation: '10 coins.',
+                        iconColor: colorScheme.tertiary,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _RuleItem(
+                        icon: Icons.emoji_events,
+                        heading: 'Medium win',
+                        explanation: '15 coins.',
+                        iconColor: colorScheme.tertiary,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _RuleItem(
+                        icon: Icons.emoji_events,
+                        heading: 'Hard win',
+                        explanation: '20 coins.',
+                        iconColor: colorScheme.tertiary,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _RuleItem(
+                        icon: Icons.stars,
+                        heading: 'No-hint win bonus',
+                        explanation: '+5 coins for winning without a hint.',
+                        iconColor: colorScheme.tertiary,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _RuleItem(
+                        icon: Icons.event_available,
+                        heading: 'First official Daily Challenge win',
+                        explanation:
+                            '+10 coins, on top of the Medium win reward — '
+                            'once per calendar day, for your first attempt '
+                            'only.',
+                        iconColor: colorScheme.tertiary,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      const _RuleItem(
+                        icon: Icons.lightbulb_outline,
+                        heading: 'Paid hints cost 20 coins',
+                        explanation:
+                            "Hard's first hint is free; every other hint "
+                            'costs 20 coins.',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
               _SectionHeading('Daily Streak'),
               const SizedBox(height: AppSpacing.sm),
               Text(
@@ -268,6 +335,16 @@ class RulesScreen extends StatelessWidget {
                             'Your Daily Challenge result is saved locally, '
                             'never sent anywhere. Changing the device date '
                             'can also change which puzzle "today" maps to.',
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      const _RuleItem(
+                        icon: Icons.replay,
+                        heading: 'Replays earn no coins',
+                        explanation:
+                            'Only your first attempt each day is official '
+                            'and earns coins. Replaying afterward is great '
+                            'practice, but since you already know the word, '
+                            'it never earns any coins at all.',
                       ),
                     ],
                   ),

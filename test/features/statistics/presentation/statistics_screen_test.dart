@@ -19,12 +19,19 @@ CompletedGame _game(String id, {GameOutcome outcome = GameOutcome.won}) =>
       maxAttempts: 15,
     );
 
-StatisticsSnapshot _readySnapshot() => StatisticsSnapshot(
+StatisticsSnapshot _readySnapshot({
+  int? fewestAttemptsOnWins,
+  int totalHintsUsed = 0,
+  int hintFreeWins = 0,
+}) => StatisticsSnapshot(
   wins: 3,
   losses: 1,
   currentWinStreak: 1,
   bestWinStreak: 2,
   totalAttemptsOnWins: 12,
+  fewestAttemptsOnWins: fewestAttemptsOnWins,
+  totalHintsUsed: totalHintsUsed,
+  hintFreeWins: hintFreeWins,
   byWordLength: {
     4: GameOutcomeBreakdown(totalGames: 2, wins: 1),
     5: GameOutcomeBreakdown(totalGames: 2, wins: 2),
@@ -43,6 +50,11 @@ Widget _buildSubject({
   VoidCallback? onClearStatistics,
   int currentStreak = 0,
   int longestStreak = 0,
+  int coinBalance = 0,
+  int totalCoinsEarned = 0,
+  int totalCoinsSpent = 0,
+  int dailyChallengesCompleted = 0,
+  int dailyChallengesWon = 0,
 }) {
   return MaterialApp(
     home: StatisticsScreen(
@@ -50,6 +62,11 @@ Widget _buildSubject({
       onClearStatistics: onClearStatistics ?? () {},
       currentStreak: currentStreak,
       longestStreak: longestStreak,
+      coinBalance: coinBalance,
+      totalCoinsEarned: totalCoinsEarned,
+      totalCoinsSpent: totalCoinsSpent,
+      dailyChallengesCompleted: dailyChallengesCompleted,
+      dailyChallengesWon: dailyChallengesWon,
     ),
   );
 }
@@ -314,5 +331,180 @@ void main() {
         expect(find.text('Longest'), findsOneWidget);
       },
     );
+  });
+
+  group('Milestone 19: coin summary card', () {
+    testWidgets('shows the balance and lifetime earned/spent totals', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          state: StatisticsReady(_readySnapshot()),
+          coinBalance: 135,
+          totalCoinsEarned: 180,
+          totalCoinsSpent: 45,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Coins'), findsOneWidget);
+      expect(find.text('Balance'), findsOneWidget);
+      expect(find.text('135'), findsOneWidget);
+      expect(find.text('Total earned'), findsOneWidget);
+      expect(find.text('180'), findsOneWidget);
+      expect(find.text('Total spent'), findsOneWidget);
+      expect(find.text('45'), findsOneWidget);
+    });
+
+    testWidgets(
+      'is shown even while statistics are still loading — coin data is '
+      'always eagerly available',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildSubject(
+            state: const StatisticsLoading(),
+            coinBalance: 100,
+            totalCoinsEarned: 0,
+            totalCoinsSpent: 0,
+          ),
+        );
+
+        expect(find.text('Coins'), findsOneWidget);
+      },
+    );
+  });
+
+  group('Milestone 19: fewest attempts on wins', () {
+    testWidgets('shows the fewest-attempts figure when there is a win', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          state: StatisticsReady(_readySnapshot(fewestAttemptsOnWins: 7)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Fewest attempts (wins)'), findsOneWidget);
+      expect(find.text('7'), findsOneWidget);
+    });
+
+    testWidgets('shows an em dash when there are no wins yet', (tester) async {
+      final snapshot = StatisticsSnapshot(
+        wins: 0,
+        losses: 1,
+        currentWinStreak: 0,
+        bestWinStreak: 0,
+        totalAttemptsOnWins: 0,
+        byWordLength: {4: GameOutcomeBreakdown(totalGames: 1, wins: 0)},
+        byDifficulty: {
+          DifficultyOption.common: GameOutcomeBreakdown(totalGames: 1, wins: 0),
+        },
+        recentGames: [_game('g1', outcome: GameOutcome.lost)],
+      );
+      await tester.pumpWidget(_buildSubject(state: StatisticsReady(snapshot)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Fewest attempts (wins)'), findsOneWidget);
+      expect(find.text('—'), findsWidgets);
+    });
+  });
+
+  group('Milestone 19: hint stats card', () {
+    testWidgets('shows total hints used and hint-free wins', (tester) async {
+      // A bespoke snapshot (rather than _readySnapshot()) so wins/hintFreeWins
+      // don't collide with any of that helper's own small numbers already
+      // rendered elsewhere on the same screen (streaks, breakdowns, etc.).
+      final snapshot = StatisticsSnapshot(
+        wins: 9,
+        losses: 0,
+        currentWinStreak: 9,
+        bestWinStreak: 9,
+        totalAttemptsOnWins: 27,
+        totalHintsUsed: 11,
+        hintFreeWins: 9,
+        byWordLength: {4: GameOutcomeBreakdown(totalGames: 9, wins: 9)},
+        byDifficulty: {
+          DifficultyOption.common: GameOutcomeBreakdown(totalGames: 9, wins: 9),
+        },
+        recentGames: const [],
+      );
+      await tester.pumpWidget(_buildSubject(state: StatisticsReady(snapshot)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Hints'), findsOneWidget);
+      expect(find.text('Total hints used'), findsOneWidget);
+      expect(find.text('11'), findsOneWidget);
+      expect(find.text('Hint-free wins'), findsOneWidget);
+      expect(find.text('9'), findsWidgets);
+    });
+
+    testWidgets('shows zero for both figures when nothing is known yet', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSubject(state: StatisticsReady(_readySnapshot())),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Total hints used'), findsOneWidget);
+      expect(find.text('Hint-free wins'), findsOneWidget);
+    });
+  });
+
+  group('Milestone 19: Daily Challenge stats card', () {
+    testWidgets('shows completed and won counts', (tester) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          state: StatisticsReady(_readySnapshot()),
+          dailyChallengesCompleted: 8,
+          dailyChallengesWon: 6,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Daily Challenge'), findsOneWidget);
+      expect(find.text('Completed'), findsOneWidget);
+      expect(find.text('8'), findsOneWidget);
+      expect(find.text('Challenge wins'), findsOneWidget);
+      expect(find.text('6'), findsOneWidget);
+    });
+
+    testWidgets(
+      'is shown even while statistics are still loading — Daily Challenge '
+      'data is always eagerly available',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildSubject(
+            state: const StatisticsLoading(),
+            dailyChallengesCompleted: 2,
+            dailyChallengesWon: 1,
+          ),
+        );
+
+        expect(find.text('Daily Challenge'), findsOneWidget);
+      },
+    );
+
+    testWidgets('does not duplicate the "Won" text a recent-game entry '
+        'already renders', (tester) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          state: StatisticsReady(_readySnapshot()),
+          dailyChallengesCompleted: 1,
+          dailyChallengesWon: 1,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The recent-games list already renders "Won · 5 letters · Medium"
+      // for the won game in _readySnapshot(), and the Overview card already
+      // has its own "Wins" row for ordinary-game wins; the Daily Challenge
+      // card must use neither "Won" nor bare "Wins", so none of the three
+      // ever read as the same figure.
+      expect(find.textContaining('Won'), findsOneWidget);
+      expect(find.text('Wins'), findsOneWidget);
+      expect(find.text('Challenge wins'), findsOneWidget);
+    });
   });
 }

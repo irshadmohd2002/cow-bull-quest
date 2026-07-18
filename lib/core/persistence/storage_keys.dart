@@ -32,4 +32,14 @@ abstract final class StorageKeys {
   /// The persisted, versioned Daily Challenge results JSON document (see
   /// `features/daily_challenge/data/local_daily_challenge_repository.dart`).
   static const String dailyChallengeResults = 'daily_challenge_results';
+
+  /// The persisted lifetime total-coins-earned string value (see
+  /// `coin_wallet.dart`). Absent on any installation that predates Milestone
+  /// 19 — [CoinWallet] treats a missing value as `0`, never as an error.
+  static const String totalCoinsEarned = 'total_coins_earned';
+
+  /// The persisted lifetime total-coins-spent string value (see
+  /// `coin_wallet.dart`). Absent on any installation that predates Milestone
+  /// 19 — [CoinWallet] treats a missing value as `0`, never as an error.
+  static const String totalCoinsSpent = 'total_coins_spent';
 }

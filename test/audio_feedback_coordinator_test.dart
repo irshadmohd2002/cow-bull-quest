@@ -195,6 +195,49 @@ void main() {
       expect(haptics.calls, isEmpty);
     });
 
+    test('Milestone 19: onCoinsEarned triggers lightImpact and no sound '
+        'effect — playCoinSpent already means "coins going away", the wrong '
+        'signal for a reward, so this deliberately never plays it', () {
+      final audio = FakeAudioService();
+      final haptics = FakeHapticService();
+      final coordinator = buildSubject(
+        audio: audio,
+        haptics: haptics,
+        settings: AudioFeedbackSettings(),
+      );
+      addTearDown(coordinator.dispose);
+
+      coordinator.onCoinsEarned();
+
+      expect(haptics.calls, ['lightImpact']);
+      expect(audio.calls, isEmpty);
+    });
+
+    test('disabled haptics suppress onCoinsEarned', () {
+      final haptics = FakeHapticService();
+      final coordinator = buildSubject(
+        audio: FakeAudioService(),
+        haptics: haptics,
+        settings: AudioFeedbackSettings(initialHapticsEnabled: false),
+      );
+      addTearDown(coordinator.dispose);
+
+      coordinator.onCoinsEarned();
+
+      expect(haptics.calls, isEmpty);
+    });
+
+    test('onCoinsEarned after disposal does not throw', () {
+      final coordinator = buildSubject(
+        audio: FakeAudioService(),
+        haptics: FakeHapticService(),
+        settings: AudioFeedbackSettings(),
+      );
+      coordinator.dispose();
+
+      expect(coordinator.onCoinsEarned, returnsNormally);
+    });
+
     test('onValidGuess triggers lightImpact', () {
       final haptics = FakeHapticService();
       final coordinator = buildSubject(

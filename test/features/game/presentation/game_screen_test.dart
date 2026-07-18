@@ -7,6 +7,7 @@ import 'package:cowbullgame/features/game/data/word_repository.dart';
 import 'package:cowbullgame/features/game/models/game_config.dart';
 import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:cowbullgame/features/game/presentation/game_screen.dart';
+import 'package:cowbullgame/features/game/services/coin_reward_calculator.dart';
 import 'package:cowbullgame/features/game/services/game_engine.dart';
 import 'package:cowbullgame/models/streak_feedback.dart';
 import 'package:cowbullgame/theme/app_theme.dart';
@@ -74,6 +75,7 @@ void main() {
     VoidCallback? onButtonTap,
     ResultShareService? shareService,
     ValueNotifier<StreakFeedback?>? streakFeedback,
+    ValueNotifier<CoinRewardBreakdown?>? coinsEarnedFeedback,
     int? currentStreak,
     ResultTextBuilder? resultTextBuilder,
   }) {
@@ -84,6 +86,7 @@ void main() {
         onButtonTap: onButtonTap,
         shareService: shareService ?? FakeResultShareService(),
         streakFeedback: streakFeedback,
+        coinsEarnedFeedback: coinsEarnedFeedback,
         currentStreak: currentStreak,
         resultTextBuilder: resultTextBuilder,
       ),
@@ -2015,5 +2018,145 @@ void main() {
 
       expect(clipboardCalls.single['text'], contains('🔥 5-day streak'));
     });
+  });
+
+  group('Milestone 19: coin reward feedback', () {
+    testWidgets(
+      'shows an itemized "Coins earned" breakdown for a positive reward',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+        // config4 is Easy difficulty: base 10 + no-hint bonus 5 = 15.
+        final coinsEarnedFeedback = ValueNotifier<CoinRewardBreakdown?>(
+          const CoinRewardBreakdown(
+            baseWinReward: 10,
+            noHintBonus: 5,
+            dailyChallengeBonus: 0,
+          ),
+        );
+
+        await tester.pumpWidget(
+          buildSubject(
+            controller,
+            config4,
+            coinsEarnedFeedback: coinsEarnedFeedback,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(find.text('Coins earned'), findsOneWidget);
+        expect(find.text('+15'), findsOneWidget);
+        expect(find.text('Easy win'), findsOneWidget);
+        expect(find.text('+10'), findsOneWidget);
+        expect(find.text('No-hint bonus'), findsOneWidget);
+        expect(find.text('+5'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'shows the Daily Challenge bonus line when present, and omits it '
+      'when zero',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+        final coinsEarnedFeedback = ValueNotifier<CoinRewardBreakdown?>(
+          const CoinRewardBreakdown(
+            baseWinReward: 15,
+            noHintBonus: 5,
+            dailyChallengeBonus: 10,
+          ),
+        );
+
+        await tester.pumpWidget(
+          buildSubject(
+            controller,
+            config4,
+            coinsEarnedFeedback: coinsEarnedFeedback,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(find.text('+30'), findsOneWidget);
+        expect(find.text('Daily Challenge bonus'), findsOneWidget);
+        expect(find.text('+10'), findsOneWidget);
+      },
+    );
+
+    testWidgets('omits a zero-value line entirely rather than showing "+0"', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      // hintsUsed > 0: no no-hint bonus line at all.
+      final coinsEarnedFeedback = ValueNotifier<CoinRewardBreakdown?>(
+        const CoinRewardBreakdown(
+          baseWinReward: 10,
+          noHintBonus: 0,
+          dailyChallengeBonus: 0,
+        ),
+      );
+
+      await tester.pumpWidget(
+        buildSubject(
+          controller,
+          config4,
+          coinsEarnedFeedback: coinsEarnedFeedback,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      // The header total and the (only) base-win line both read "+10",
+      // since there is no separate bonus line to distinguish them.
+      expect(find.text('+10'), findsNWidgets(2));
+      expect(find.textContaining('No-hint bonus'), findsNothing);
+      expect(find.textContaining('Daily Challenge bonus'), findsNothing);
+    });
+
+    testWidgets('shows no coin-reward card at all when null', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(find.textContaining('Coins earned'), findsNothing);
+    });
+
+    testWidgets(
+      'shows no coin-reward card on a loss even if coinsEarnedFeedback were '
+      'somehow non-null',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+
+        await tester.pumpWidget(buildSubject(controller, config4));
+        await tester.pumpAndSettle();
+        for (var i = 0; i < 10; i++) {
+          await enterAndSubmit(tester, 'mock');
+        }
+
+        expect(find.text('You lost'), findsOneWidget);
+        expect(find.textContaining('Coins earned'), findsNothing);
+      },
+    );
   });
 }

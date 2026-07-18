@@ -155,6 +155,31 @@ class AudioFeedbackCoordinator
     }
   }
 
+  /// A Milestone 19 coin reward was just durably persisted for a completed
+  /// game — see `CoinWallet.earn`'s `onPersisted` parameter, this method's
+  /// only caller (`CowBullApp._awardCoinReward`). Never called for a loss, a
+  /// non-rewarding Daily Challenge replay, a rebuild, or a reward whose
+  /// persistence write failed.
+  ///
+  /// Haptic-only, deliberately: this app has exactly one coin-related sound
+  /// effect, [AudioService.playCoinSpent], which already carries a "coins
+  /// going away" meaning (paired with the hint-used sound for a paid hint —
+  /// see [_playPaidHintSfxSequence]); reusing it here for the opposite event
+  /// (coins arriving) would send the wrong signal. Rather than add a new
+  /// audio asset for one milestone, this follows [onStreakUpdated]'s
+  /// existing precedent — a restrained [HapticService.lightImpact], no
+  /// sound — and deliberately does *not* reuse [HapticService.success],
+  /// since [onGameWon] already fires that haptic (plus [AudioService.playWin])
+  /// for every win, including a rewarded one, moments before this call; a
+  /// second `success`-strength haptic back to back would read as a jarring
+  /// repeat rather than a distinct, restrained follow-up cue.
+  void onCoinsEarned() {
+    if (_disposed) return;
+    if (_settings.hapticsEnabled) {
+      _fireAndForget(_hapticService.lightImpact);
+    }
+  }
+
   @override
   void onValidGuess() {
     if (_disposed) return;

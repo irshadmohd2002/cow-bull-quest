@@ -51,6 +51,24 @@ void main() {
       expect(bootstrap.coinWallet.balance, 42);
     });
 
+    test('restores persisted lifetime coin totals', () async {
+      SharedPreferences.setMockInitialValues({
+        StorageKeys.coinBalance: '42',
+        StorageKeys.totalCoinsEarned: '150',
+        StorageKeys.totalCoinsSpent: '80',
+      });
+      final bootstrap = await AppBootstrap.load();
+      expect(bootstrap.coinWallet.totalCoinsEarned, 150);
+      expect(bootstrap.coinWallet.totalCoinsSpent, 80);
+    });
+
+    test('a fresh install (predating Milestone 19) starts both coin totals at '
+        'zero', () async {
+      final bootstrap = await AppBootstrap.load();
+      expect(bootstrap.coinWallet.totalCoinsEarned, 0);
+      expect(bootstrap.coinWallet.totalCoinsSpent, 0);
+    });
+
     test(
       'defaults the audio feedback preferences when nothing is stored',
       () async {
@@ -115,13 +133,15 @@ void main() {
   });
 
   group('AppBootstrap.resetLocalData', () {
-    test('removes the theme preference, statistics, coin balance, and audio '
-        'feedback keys', () async {
+    test('removes the theme preference, statistics, coin balance, coin '
+        'totals, and audio feedback keys', () async {
       final store = FakePreferencesStore(
         initialValues: {
           StorageKeys.themePreference: 'dark',
           StorageKeys.statistics: '{"whatever":true}',
           StorageKeys.coinBalance: '80',
+          StorageKeys.totalCoinsEarned: '150',
+          StorageKeys.totalCoinsSpent: '70',
           StorageKeys.soundEffectsEnabled: 'false',
           StorageKeys.musicEnabled: 'true',
           StorageKeys.hapticsEnabled: 'false',
@@ -133,6 +153,8 @@ void main() {
       expect(store.values.containsKey(StorageKeys.themePreference), isFalse);
       expect(store.values.containsKey(StorageKeys.statistics), isFalse);
       expect(store.values.containsKey(StorageKeys.coinBalance), isFalse);
+      expect(store.values.containsKey(StorageKeys.totalCoinsEarned), isFalse);
+      expect(store.values.containsKey(StorageKeys.totalCoinsSpent), isFalse);
       expect(
         store.values.containsKey(StorageKeys.soundEffectsEnabled),
         isFalse,

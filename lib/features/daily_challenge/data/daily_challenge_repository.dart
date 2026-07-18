@@ -14,6 +14,14 @@ abstract class DailyChallengeRepository {
   /// stored data for that date).
   Future<DailyChallengeResult?> loadResult(LocalDate date);
 
+  /// Loads every official result ever recorded, across every date, in no
+  /// particular order. Used only to compute lifetime Daily Challenge
+  /// statistics (completed/won counts) — see `DailyChallengeController`.
+  /// Malformed data for one date never prevents every other, otherwise-valid
+  /// date's result from being returned, mirroring [loadResult]'s own
+  /// per-date recovery.
+  Future<List<DailyChallengeResult>> loadAllResults();
+
   /// Records [result] as the official result for its date, but only if none
   /// is already stored for that date — the first completed attempt for a
   /// date is always the official one; a later call for the same date is a

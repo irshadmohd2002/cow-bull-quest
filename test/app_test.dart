@@ -1,5 +1,6 @@
 import 'package:cowbullgame/app.dart';
 import 'package:cowbullgame/app_settings.dart';
+import 'package:cowbullgame/coin_wallet.dart';
 import 'package:cowbullgame/core/privacy_policy.dart' as privacy_policy_config;
 import 'package:cowbullgame/core/time/local_date.dart';
 import 'package:cowbullgame/features/game/data/asset_word_repository.dart';
@@ -10,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_local_date_provider.dart';
+import 'support/fake_preferences_store.dart';
 import 'support/fake_statistics_repository.dart';
 
 /// A minimal [WordRepository] fake so app-level navigation can be exercised
@@ -1471,6 +1473,317 @@ void main() {
 
         expect(clipboardCalls, hasLength(2));
         expect(clipboardCalls[1]['text'], officialText);
+      },
+    );
+  });
+
+  group('Milestone 19: coin rewards', () {
+    Future<void> enterAndSubmit(WidgetTester tester, String guess) async {
+      await tester.enterText(find.byType(TextField), guess);
+      await tester.tap(find.text('Submit'));
+      await tester.pumpAndSettle();
+    }
+
+    LocalDate today() => LocalDate(year: 2026, month: 7, day: 18);
+
+    testWidgets(
+      'an Easy no-hint win earns 15 coins (10 base + 5 no-hint bonus)',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        await tester.pumpWidget(CowBullApp(wordRepository: repo));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Easy'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Start Game'));
+        await tester.tap(find.text('Start Game'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(find.text('You won!'), findsOneWidget);
+        expect(find.text('Coins earned'), findsOneWidget);
+        expect(find.text('+15'), findsOneWidget);
+        expect(find.text('Easy win'), findsOneWidget);
+        expect(find.text('+10'), findsOneWidget);
+        expect(find.text('No-hint bonus'), findsOneWidget);
+        expect(find.text('+5'), findsOneWidget);
+        expect(find.text('115'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a Medium-difficulty win that used a hint earns only the 15-coin '
+      'base — no no-hint bonus',
+      (tester) async {
+        final repo = _FakeWordRepository()
+          ..wordsByLength[4] = 'lace'
+          ..allowedWordsByLength[4] = {'lace', 'mace'};
+        await tester.pumpWidget(CowBullApp(wordRepository: repo));
+        await tester.pumpAndSettle();
+
+        // Medium is the default difficulty; no tap needed.
+        await tester.ensureVisible(find.text('Start Game'));
+        await tester.tap(find.text('Start Game'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.lightbulb_outline));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Use 20 Coins'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(find.text('You won!'), findsOneWidget);
+        expect(find.text('Coins earned'), findsOneWidget);
+        expect(find.text('Medium win'), findsOneWidget);
+        expect(find.textContaining('No-hint bonus'), findsNothing);
+        // The header total and the (only) base-win line both read "+15",
+        // since there is no separate no-hint-bonus line to distinguish them.
+        expect(find.text('+15'), findsNWidgets(2));
+        // 100 - 20 (hint) + 15 (reward) = 95.
+        expect(find.text('95'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a Hard no-hint win earns 25 coins (20 base + 5 no-hint bonus)',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        await tester.pumpWidget(CowBullApp(wordRepository: repo));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Hard'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Start Game'));
+        await tester.tap(find.text('Start Game'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(find.text('Coins earned'), findsOneWidget);
+        expect(find.text('+25'), findsOneWidget);
+        expect(find.text('Hard win'), findsOneWidget);
+        expect(find.text('+20'), findsOneWidget);
+        expect(find.text('No-hint bonus'), findsOneWidget);
+        expect(find.text('+5'), findsOneWidget);
+        expect(find.text('125'), findsOneWidget);
+      },
+    );
+
+    testWidgets('a loss earns 0 coins and shows no coin-reward line', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()
+        ..wordsByLength[4] = 'lace'
+        ..allowedWordsByLength[4] = {'lace', 'mock'};
+      await tester.pumpWidget(CowBullApp(wordRepository: repo));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+      for (var i = 0; i < 10; i++) {
+        await enterAndSubmit(tester, 'mock');
+      }
+
+      expect(find.text('You lost'), findsOneWidget);
+      expect(find.textContaining('Coins earned'), findsNothing);
+      expect(find.text('100'), findsOneWidget);
+    });
+
+    testWidgets('abandoning an in-progress game earns no coins', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      await tester.pumpWidget(CowBullApp(wordRepository: repo));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.text('100'), findsOneWidget);
+    });
+
+    testWidgets(
+      'restarting after a win grants a second, independent coin reward — '
+      'rewards are exactly once per completion, never skipped on replay of '
+      'an ordinary game',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        await tester.pumpWidget(CowBullApp(wordRepository: repo));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Easy'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Start Game'));
+        await tester.tap(find.text('Start Game'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+        expect(find.text('115'), findsOneWidget);
+
+        await tester.tap(find.text('Restart'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(find.text('130'), findsOneWidget);
+      },
+    );
+
+    testWidgets('navigating away after a completed win does not grant the coin '
+        'reward again', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      await tester.pumpWidget(CowBullApp(wordRepository: repo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Easy'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+      expect(find.text('115'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Return to Home'));
+      await tester.tap(find.text('Return to Home'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('115'), findsOneWidget);
+    });
+
+    testWidgets(
+      'the official (first) Daily Challenge win earns the Medium reward '
+      'plus the no-hint bonus plus the official bonus (15 + 5 + 10 = 30)',
+      (tester) async {
+        final repo = _FakeWordRepository()
+          ..wordsByLength[4] = 'lace'
+          ..secretWordsByLengthAndDifficulty[(4, GameDifficulty.common)] = [
+            'lace',
+          ];
+        await tester.pumpWidget(
+          CowBullApp(
+            wordRepository: repo,
+            clock: FakeLocalDateProvider(today()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Daily Challenge'));
+        await tester.tap(find.text('Daily Challenge'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(find.text('You won!'), findsOneWidget);
+        expect(find.text('Coins earned'), findsOneWidget);
+        expect(find.text('+30'), findsOneWidget);
+        expect(find.text('Medium win'), findsOneWidget);
+        expect(find.text('+15'), findsOneWidget);
+        expect(find.text('No-hint bonus'), findsOneWidget);
+        expect(find.text('+5'), findsOneWidget);
+        expect(find.text('Daily Challenge bonus'), findsOneWidget);
+        expect(find.text('+10'), findsOneWidget);
+        expect(find.text('130'), findsOneWidget);
+      },
+    );
+
+    testWidgets('a Daily Challenge replay after the official win earns no '
+        'additional coins at all — not just missing the official bonus', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()
+        ..wordsByLength[4] = 'lace'
+        ..secretWordsByLengthAndDifficulty[(4, GameDifficulty.common)] = [
+          'lace',
+        ];
+      await tester.pumpWidget(
+        CowBullApp(wordRepository: repo, clock: FakeLocalDateProvider(today())),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Daily Challenge'));
+      await tester.tap(find.text('Daily Challenge'));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+      expect(find.text('130'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Restart'));
+      await tester.tap(find.text('Restart'));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(find.text('130'), findsOneWidget);
+      expect(find.textContaining('Coins earned'), findsNothing);
+    });
+
+    testWidgets('the Statistics screen shows real coin totals accumulated from '
+        'gameplay', (tester) async {
+      final repo = _FakeWordRepository()
+        ..wordsByLength[4] = 'lace'
+        ..allowedWordsByLength[4] = {'lace', 'mace'};
+      await tester.pumpWidget(
+        CowBullApp(
+          wordRepository: repo,
+          statisticsRepository: FakeStatisticsRepository(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Easy'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.lightbulb_outline));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use 20 Coins'));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+      // Easy win with a hint used: base 10, no no-hint bonus.
+      // Balance: 100 - 20 (hint) + 10 (reward) = 90.
+
+      await tester.ensureVisible(find.text('Return to Home'));
+      await tester.tap(find.text('Return to Home'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Statistics'));
+      await tester.tap(find.text('Statistics'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Coins'), findsOneWidget);
+      expect(find.text('90'), findsOneWidget);
+      expect(find.text('10'), findsOneWidget);
+      expect(find.text('20'), findsOneWidget);
+    });
+
+    testWidgets(
+      'a coin-wallet persistence failure never blocks the win screen or '
+      'throws — the reward still shows, from in-memory truth',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final failingStore = FakePreferencesStore()..failSetString = true;
+        final coinWallet = CoinWallet(initialBalance: 100, store: failingStore);
+        await tester.pumpWidget(
+          CowBullApp(wordRepository: repo, coinWallet: coinWallet),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Easy'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Start Game'));
+        await tester.tap(find.text('Start Game'));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(find.text('You won!'), findsOneWidget);
+        expect(find.text('Coins earned'), findsOneWidget);
+        expect(find.text('+15'), findsOneWidget);
+        // The in-memory balance still reflects the reward even though every
+        // write to failingStore fails.
+        expect(find.text('115'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        expect(coinWallet.debugLastPersistError, isNotNull);
       },
     );
   });

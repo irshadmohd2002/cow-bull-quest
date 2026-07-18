@@ -20,6 +20,11 @@ import 'package:cowbullgame/core/persistence/preferences_store.dart';
 /// after a later one would, if nothing serialized them) to prove a caller
 /// actually queues writes rather than merely happening to complete them in
 /// order.
+///
+/// [failSetStringForKeys], if a call's key is in the set, fails only that
+/// specific [setString] call — lets a test force a *partial* multi-key write
+/// failure (e.g. a balance write that succeeds followed by a totals write
+/// that doesn't), which the blanket [failSetString] cannot express.
 class FakePreferencesStore implements PreferencesStore {
   FakePreferencesStore({Map<String, String>? initialValues})
     : _values = {...?initialValues};
@@ -35,6 +40,7 @@ class FakePreferencesStore implements PreferencesStore {
 
   Completer<void>? getStringGate;
   final Map<String, Duration> setStringDelays = {};
+  final Set<String> failSetStringForKeys = {};
 
   /// Direct read access for test assertions, bypassing the interface.
   Map<String, String> get values => Map.unmodifiable(_values);
@@ -56,7 +62,7 @@ class FakePreferencesStore implements PreferencesStore {
     if (delay != null && delay > Duration.zero) {
       await Future<void>.delayed(delay);
     }
-    if (failSetString) {
+    if (failSetString || failSetStringForKeys.contains(key)) {
       throw const PreferencesStoreException('forced setString failure');
     }
     _values[key] = value;

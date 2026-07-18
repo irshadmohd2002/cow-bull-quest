@@ -231,4 +231,72 @@ void main() {
       expect(find.textContaining('real money'), findsNothing);
     });
   });
+
+  group('Milestone 19: coin rewards explanation', () {
+    testWidgets('shows the Coin Rewards section heading', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.text('Coin Rewards'), findsOneWidget);
+    });
+
+    testWidgets('states the Easy win reward', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.text('Easy win'), findsOneWidget);
+      expect(find.text('10 coins.'), findsOneWidget);
+    });
+
+    testWidgets('states the Medium win reward', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.text('Medium win'), findsOneWidget);
+      expect(find.text('15 coins.'), findsOneWidget);
+    });
+
+    testWidgets('states the Hard win reward', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.text('Hard win'), findsOneWidget);
+      expect(find.text('20 coins.'), findsOneWidget);
+    });
+
+    testWidgets('states the no-hint win bonus', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.text('No-hint win bonus'), findsOneWidget);
+      expect(
+        find.textContaining('+5 coins for winning without a hint'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('states the first official Daily Challenge win bonus', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.text('First official Daily Challenge win'), findsOneWidget);
+      expect(find.textContaining('+10 coins'), findsOneWidget);
+    });
+
+    testWidgets('states paid hints cost 20 coins', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.text('Paid hints cost 20 coins'), findsOneWidget);
+    });
+
+    testWidgets(
+      'explains a Daily Challenge replay earns no coins, since the word '
+      'is already known',
+      (tester) async {
+        await tester.pumpWidget(buildSubject());
+        expect(find.text('Replays earn no coins'), findsOneWidget);
+        expect(
+          find.textContaining('never earns any coins at all'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('never mentions cash, money, or real-world redemption', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.textContaining('cash'), findsNothing);
+      expect(find.textContaining('real money'), findsNothing);
+    });
+  });
 }

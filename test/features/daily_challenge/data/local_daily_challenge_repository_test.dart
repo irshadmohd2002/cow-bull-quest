@@ -136,4 +136,56 @@ void main() {
       },
     );
   });
+
+  group('Milestone 19: LocalDailyChallengeRepository.loadAllResults', () {
+    test('returns an empty list when nothing is stored', () async {
+      final repository = LocalDailyChallengeRepository(
+        store: FakePreferencesStore(),
+      );
+      expect(await repository.loadAllResults(), isEmpty);
+    });
+
+    test('returns every recorded result, across every date', () async {
+      final repository = LocalDailyChallengeRepository(
+        store: FakePreferencesStore(),
+      );
+      final day1 = LocalDate(year: 2026, month: 7, day: 18);
+      final day2 = LocalDate(year: 2026, month: 7, day: 19);
+      await repository.recordIfFirst(_result(day1, won: true));
+      await repository.recordIfFirst(_result(day2, won: false));
+
+      final all = await repository.loadAllResults();
+
+      expect(all, hasLength(2));
+      expect(all.map((r) => r.date), containsAll([day1, day2]));
+    });
+
+    test('never includes a replay — only the official (first) result per '
+        'date', () async {
+      final repository = LocalDailyChallengeRepository(
+        store: FakePreferencesStore(),
+      );
+      final date = LocalDate(year: 2026, month: 7, day: 18);
+      final official = _result(date, attemptsUsed: 3, won: true);
+      final replay = _result(date, attemptsUsed: 7, won: false);
+      await repository.recordIfFirst(official);
+      await repository.recordIfFirst(replay);
+
+      final all = await repository.loadAllResults();
+
+      expect(all, hasLength(1));
+      expect(all.single, official);
+    });
+
+    test(
+      'recovers safely to an empty list from malformed top-level JSON',
+      () async {
+        final store = FakePreferencesStore(
+          initialValues: {StorageKeys.dailyChallengeResults: 'not json'},
+        );
+        final repository = LocalDailyChallengeRepository(store: store);
+        expect(await repository.loadAllResults(), isEmpty);
+      },
+    );
+  });
 }

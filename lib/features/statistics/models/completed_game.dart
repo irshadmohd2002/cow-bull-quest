@@ -16,19 +16,22 @@ const List<int> supportedCompletedGameWordLengths = [4, 5, 6];
 ///
 /// Deliberately carries no secret word, guess words, or score detail — only
 /// what aggregate statistics need: [wordLength], [difficulty], [outcome],
-/// and the attempt counts. [difficulty] uses the shared, feature-neutral
-/// [DifficultyOption] — already used by `home` to offer a difficulty choice
-/// — rather than the `game` feature's own `GameDifficulty`, so this feature
-/// never has to import `game` just to describe a finished game's difficulty;
-/// the app-level composition root already has the [DifficultyOption] on hand
-/// when it starts a game, and passes it straight through here when that game
-/// completes.
+/// the attempt counts, and (since Milestone 19) [hintsUsed]. [difficulty]
+/// uses the shared, feature-neutral [DifficultyOption] — already used by
+/// `home` to offer a difficulty choice — rather than the `game` feature's
+/// own `GameDifficulty`, so this feature never has to import `game` just to
+/// describe a finished game's difficulty; the app-level composition root
+/// already has the [DifficultyOption] on hand when it starts a game, and
+/// passes it straight through here when that game completes.
 class CompletedGame {
   /// Builds a validated completed-game record.
   ///
+  /// [hintsUsed] defaults to `null`, meaning "unknown" — see its own doc.
+  ///
   /// Throws [ArgumentError] if [id] is empty, [wordLength] is not one of
   /// [supportedCompletedGameWordLengths], [maxAttempts] or [attemptsUsed] is
-  /// not positive, or [attemptsUsed] exceeds [maxAttempts].
+  /// not positive, [attemptsUsed] exceeds [maxAttempts], or [hintsUsed] is
+  /// negative.
   CompletedGame({
     required this.id,
     required this.completedAt,
@@ -37,6 +40,7 @@ class CompletedGame {
     required this.outcome,
     required this.attemptsUsed,
     required this.maxAttempts,
+    this.hintsUsed,
   }) {
     if (id.isEmpty) {
       throw ArgumentError.value(id, 'id', 'must not be empty');
@@ -62,15 +66,26 @@ class CompletedGame {
         'must not exceed maxAttempts ($maxAttempts)',
       );
     }
+    final hintsUsed = this.hintsUsed;
+    if (hintsUsed != null && hintsUsed < 0) {
+      throw ArgumentError.value(hintsUsed, 'hintsUsed', 'must not be negative');
+    }
   }
 
   /// Rebuilds a [CompletedGame] from a JSON-compatible [json] map, as
   /// produced by [toJson].
   ///
+  /// [hintsUsed] reads as `null` (unknown) whenever the key is absent or
+  /// explicitly JSON `null` — this is how every record written before
+  /// Milestone 19 decodes, since [toJson] did not emit the key at all before
+  /// then. See [hintsUsed]'s own doc for why a decoded `null` must never be
+  /// treated as `0`.
+  ///
   /// Throws [FormatException] if a required field is missing, has the wrong
   /// type, or (for [difficulty]/[outcome]) is not a recognized stable
-  /// string. Throws [ArgumentError] if the reconstructed values fail the
-  /// same validation the default constructor enforces.
+  /// string; also if `hintsUsed` is present but is neither `null` nor an
+  /// int. Throws [ArgumentError] if the reconstructed values fail the same
+  /// validation the default constructor enforces.
   factory CompletedGame.fromJson(Map<String, Object?> json) {
     final id = json['id'];
     final completedAt = json['completedAt'];
@@ -79,6 +94,7 @@ class CompletedGame {
     final outcome = json['outcome'];
     final attemptsUsed = json['attemptsUsed'];
     final maxAttempts = json['maxAttempts'];
+    final hintsUsed = json['hintsUsed'];
 
     if (id is! String) {
       throw const FormatException('completed game "id" must be a string');
@@ -109,6 +125,11 @@ class CompletedGame {
         'completed game "maxAttempts" must be an int',
       );
     }
+    if (hintsUsed != null && hintsUsed is! int) {
+      throw const FormatException(
+        'completed game "hintsUsed" must be an int or null',
+      );
+    }
 
     final parsedCompletedAt = DateTime.tryParse(completedAt);
     if (parsedCompletedAt == null) {
@@ -126,6 +147,7 @@ class CompletedGame {
       outcome: gameOutcomeFromStorage(outcome),
       attemptsUsed: attemptsUsed,
       maxAttempts: maxAttempts,
+      hintsUsed: hintsUsed as int?,
     );
   }
 
@@ -151,6 +173,19 @@ class CompletedGame {
   /// The maximum number of valid guesses that were allowed.
   final int maxAttempts;
 
+  /// The number of hints used in this game, or `null` if unknown.
+  ///
+  /// `null` exclusively means "this record predates Milestone 19's hint
+  /// tracking" — never "zero hints were used". Every record this app writes
+  /// going forward always supplies a real, non-negative integer here; `null`
+  /// is only ever produced by decoding a pre-Milestone-19 stored record via
+  /// [fromJson]. Aggregate statistics (`hintFreeWins`, `totalHintsUsed` on
+  /// `StatisticsSnapshot`) must treat `null` as "unknown, contributes
+  /// nothing" rather than "0, therefore hint-free" — conflating the two
+  /// would misclassify an old win of unknown hint usage as a genuine
+  /// no-hint win.
+  final int? hintsUsed;
+
   /// Serializes this record to a JSON-compatible map, using stable string
   /// values for [difficulty] and [outcome] — never enum indexes.
   Map<String, Object?> toJson() => {
@@ -161,6 +196,7 @@ class CompletedGame {
     'outcome': outcome.storageValue,
     'attemptsUsed': attemptsUsed,
     'maxAttempts': maxAttempts,
+    'hintsUsed': hintsUsed,
   };
 
   @override
@@ -173,7 +209,8 @@ class CompletedGame {
           other.difficulty == difficulty &&
           other.outcome == outcome &&
           other.attemptsUsed == attemptsUsed &&
-          other.maxAttempts == maxAttempts);
+          other.maxAttempts == maxAttempts &&
+          other.hintsUsed == hintsUsed);
 
   @override
   int get hashCode => Object.hash(
@@ -184,11 +221,13 @@ class CompletedGame {
     outcome,
     attemptsUsed,
     maxAttempts,
+    hintsUsed,
   );
 
   @override
   String toString() =>
       'CompletedGame(id: $id, completedAt: $completedAt, '
       'wordLength: $wordLength, difficulty: $difficulty, outcome: $outcome, '
-      'attemptsUsed: $attemptsUsed, maxAttempts: $maxAttempts)';
+      'attemptsUsed: $attemptsUsed, maxAttempts: $maxAttempts, '
+      'hintsUsed: $hintsUsed)';
 }

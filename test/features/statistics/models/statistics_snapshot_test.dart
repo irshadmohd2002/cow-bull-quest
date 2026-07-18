@@ -27,6 +27,9 @@ void main() {
       expect(snapshot.currentWinStreak, 0);
       expect(snapshot.bestWinStreak, 0);
       expect(snapshot.averageAttemptsOnWins, isNull);
+      expect(snapshot.fewestAttemptsOnWins, isNull);
+      expect(snapshot.totalHintsUsed, 0);
+      expect(snapshot.hintFreeWins, 0);
       expect(snapshot.byWordLength, isEmpty);
       expect(snapshot.byDifficulty, isEmpty);
       expect(snapshot.recentGames, isEmpty);
@@ -91,6 +94,44 @@ void main() {
     });
   });
 
+  group('Milestone 19: fewestAttemptsOnWins/totalHintsUsed/hintFreeWins', () {
+    test('are stored verbatim when supplied', () {
+      final snapshot = StatisticsSnapshot(
+        wins: 3,
+        losses: 1,
+        currentWinStreak: 1,
+        bestWinStreak: 2,
+        totalAttemptsOnWins: 9,
+        fewestAttemptsOnWins: 2,
+        totalHintsUsed: 5,
+        hintFreeWins: 2,
+        byWordLength: const {},
+        byDifficulty: const {},
+        recentGames: const [],
+      );
+      expect(snapshot.fewestAttemptsOnWins, 2);
+      expect(snapshot.totalHintsUsed, 5);
+      expect(snapshot.hintFreeWins, 2);
+    });
+
+    test('hintFreeWins equal to wins is allowed (every win was hint-free)', () {
+      expect(
+        () => StatisticsSnapshot(
+          wins: 2,
+          losses: 0,
+          currentWinStreak: 2,
+          bestWinStreak: 2,
+          totalAttemptsOnWins: 6,
+          hintFreeWins: 2,
+          byWordLength: const {},
+          byDifficulty: const {},
+          recentGames: const [],
+        ),
+        returnsNormally,
+      );
+    });
+  });
+
   group('StatisticsSnapshot validation', () {
     test('rejects a negative wins counter', () {
       expect(
@@ -116,6 +157,57 @@ void main() {
           currentWinStreak: 3,
           bestWinStreak: 2,
           totalAttemptsOnWins: 9,
+          byWordLength: const {},
+          byDifficulty: const {},
+          recentGames: const [],
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects hintFreeWins greater than wins', () {
+      expect(
+        () => StatisticsSnapshot(
+          wins: 1,
+          losses: 0,
+          currentWinStreak: 1,
+          bestWinStreak: 1,
+          totalAttemptsOnWins: 3,
+          hintFreeWins: 2,
+          byWordLength: const {},
+          byDifficulty: const {},
+          recentGames: const [],
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects a negative totalHintsUsed', () {
+      expect(
+        () => StatisticsSnapshot(
+          wins: 0,
+          losses: 0,
+          currentWinStreak: 0,
+          bestWinStreak: 0,
+          totalAttemptsOnWins: 0,
+          totalHintsUsed: -1,
+          byWordLength: const {},
+          byDifficulty: const {},
+          recentGames: const [],
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects a fewestAttemptsOnWins less than 1 when not null', () {
+      expect(
+        () => StatisticsSnapshot(
+          wins: 1,
+          losses: 0,
+          currentWinStreak: 1,
+          bestWinStreak: 1,
+          totalAttemptsOnWins: 3,
+          fewestAttemptsOnWins: 0,
           byWordLength: const {},
           byDifficulty: const {},
           recentGames: const [],

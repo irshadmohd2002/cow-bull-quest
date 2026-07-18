@@ -11,6 +11,7 @@ CompletedGame _buildGame({
   GameOutcome outcome = GameOutcome.won,
   int attemptsUsed = 3,
   int maxAttempts = 15,
+  int? hintsUsed,
 }) => CompletedGame(
   id: id,
   completedAt: completedAt ?? DateTime.utc(2026, 1, 2, 3, 4, 5),
@@ -19,6 +20,7 @@ CompletedGame _buildGame({
   outcome: outcome,
   attemptsUsed: attemptsUsed,
   maxAttempts: maxAttempts,
+  hintsUsed: hintsUsed,
 );
 
 void main() {
@@ -126,6 +128,60 @@ void main() {
       final json = _buildGame().toJson();
       json['attemptsUsed'] = 99;
       expect(() => CompletedGame.fromJson(json), throwsArgumentError);
+    });
+  });
+
+  group('Milestone 19: hintsUsed', () {
+    test('defaults to null (unknown) when not supplied', () {
+      expect(_buildGame().hintsUsed, isNull);
+    });
+
+    test('accepts 0 — a real, known no-hint win', () {
+      expect(_buildGame(hintsUsed: 0).hintsUsed, 0);
+    });
+
+    test('rejects a negative hintsUsed', () {
+      expect(() => _buildGame(hintsUsed: -1), throwsArgumentError);
+    });
+
+    test('toJson always includes the "hintsUsed" key, as an int or JSON '
+        'null', () {
+      expect(_buildGame(hintsUsed: 2).toJson()['hintsUsed'], 2);
+      expect(_buildGame().toJson().containsKey('hintsUsed'), isTrue);
+      expect(_buildGame().toJson()['hintsUsed'], isNull);
+    });
+
+    test('fromJson(toJson()) round-trips a known hintsUsed value', () {
+      final game = _buildGame(hintsUsed: 1);
+      expect(CompletedGame.fromJson(game.toJson()).hintsUsed, 1);
+    });
+
+    test('fromJson decodes a record with no "hintsUsed" key at all (every '
+        'record written before Milestone 19) as null, never 0 — this is the '
+        'exact migration rule that keeps an old win from being misclassified '
+        'as hint-free', () {
+      final json = _buildGame().toJson()..remove('hintsUsed');
+      expect(CompletedGame.fromJson(json).hintsUsed, isNull);
+    });
+
+    test(
+      'fromJson decodes an explicit JSON null the same as a missing key',
+      () {
+        final json = _buildGame().toJson();
+        json['hintsUsed'] = null;
+        expect(CompletedGame.fromJson(json).hintsUsed, isNull);
+      },
+    );
+
+    test('fromJson rejects a non-int, non-null hintsUsed', () {
+      final json = _buildGame().toJson();
+      json['hintsUsed'] = 'two';
+      expect(() => CompletedGame.fromJson(json), throwsFormatException);
+    });
+
+    test('two records differing only in hintsUsed are not equal', () {
+      expect(_buildGame(hintsUsed: 0), isNot(_buildGame(hintsUsed: 1)));
+      expect(_buildGame(hintsUsed: null), isNot(_buildGame(hintsUsed: 0)));
     });
   });
 }

@@ -121,7 +121,8 @@ class AppBootstrap {
 
   /// Deletes every app-owned local storage key — currently
   /// [StorageKeys.themePreference], [StorageKeys.statistics],
-  /// [StorageKeys.coinBalance], [StorageKeys.soundEffectsEnabled],
+  /// [StorageKeys.coinBalance], [StorageKeys.totalCoinsEarned],
+  /// [StorageKeys.totalCoinsSpent], [StorageKeys.soundEffectsEnabled],
   /// [StorageKeys.musicEnabled], [StorageKeys.hapticsEnabled],
   /// [StorageKeys.streak], and [StorageKeys.dailyChallengeResults], and
   /// nothing else — from [store]. Used by the startup failure screen's
@@ -136,6 +137,8 @@ class AppBootstrap {
     await store.remove(StorageKeys.themePreference);
     await store.remove(StorageKeys.statistics);
     await store.remove(StorageKeys.coinBalance);
+    await store.remove(StorageKeys.totalCoinsEarned);
+    await store.remove(StorageKeys.totalCoinsSpent);
     await store.remove(StorageKeys.soundEffectsEnabled);
     await store.remove(StorageKeys.musicEnabled);
     await store.remove(StorageKeys.hapticsEnabled);

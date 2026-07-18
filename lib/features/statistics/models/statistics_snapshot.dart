@@ -22,14 +22,17 @@ const int maxRecentGames = 20;
 /// no wins yet.
 class StatisticsSnapshot {
   /// Throws [ArgumentError] if any counter is negative, if
-  /// [currentWinStreak] exceeds [bestWinStreak], or if [recentGames] has
-  /// more than [maxRecentGames] entries.
+  /// [currentWinStreak] exceeds [bestWinStreak], if [hintFreeWins] exceeds
+  /// [wins], or if [recentGames] has more than [maxRecentGames] entries.
   StatisticsSnapshot({
     required this.wins,
     required this.losses,
     required this.currentWinStreak,
     required this.bestWinStreak,
     required this.totalAttemptsOnWins,
+    this.fewestAttemptsOnWins,
+    this.totalHintsUsed = 0,
+    this.hintFreeWins = 0,
     required Map<int, GameOutcomeBreakdown> byWordLength,
     required Map<DifficultyOption, GameOutcomeBreakdown> byDifficulty,
     required List<CompletedGame> recentGames,
@@ -68,6 +71,35 @@ class StatisticsSnapshot {
         totalAttemptsOnWins,
         'totalAttemptsOnWins',
         'must not be negative',
+      );
+    }
+    final fewestAttemptsOnWins = this.fewestAttemptsOnWins;
+    if (fewestAttemptsOnWins != null && fewestAttemptsOnWins < 1) {
+      throw ArgumentError.value(
+        fewestAttemptsOnWins,
+        'fewestAttemptsOnWins',
+        'must be >= 1 when not null',
+      );
+    }
+    if (totalHintsUsed < 0) {
+      throw ArgumentError.value(
+        totalHintsUsed,
+        'totalHintsUsed',
+        'must not be negative',
+      );
+    }
+    if (hintFreeWins < 0) {
+      throw ArgumentError.value(
+        hintFreeWins,
+        'hintFreeWins',
+        'must not be negative',
+      );
+    }
+    if (hintFreeWins > wins) {
+      throw ArgumentError.value(
+        hintFreeWins,
+        'hintFreeWins',
+        'must not exceed wins ($wins)',
       );
     }
     if (recentGames.length > maxRecentGames) {
@@ -120,6 +152,34 @@ class StatisticsSnapshot {
   /// (never a divide-by-zero) when [wins] is `0`.
   double? get averageAttemptsOnWins =>
       wins == 0 ? null : totalAttemptsOnWins / wins;
+
+  /// The fewest [CompletedGame.attemptsUsed] across every won game — the
+  /// player's personal-best attempt count. `null` when [wins] is `0`.
+  ///
+  /// For a wallet migrated from a pre-Milestone-19 statistics document (see
+  /// `LocalStatisticsRepository`), this is a best-effort value derived only
+  /// from whichever won games still happened to be in the bounded
+  /// `recentGames` window at migration time — a win outside that window may
+  /// have used fewer attempts, so this can only ever be as good as, or
+  /// better than, what migration could see; it always becomes exact for any
+  /// win recorded from that point on.
+  final int? fewestAttemptsOnWins;
+
+  /// The sum of [CompletedGame.hintsUsed] across every completed game whose
+  /// hint usage is actually known (i.e. `hintsUsed != null`). A game with
+  /// unknown hint usage (a pre-Milestone-19 record) contributes `0` here —
+  /// not because it used no hints, but because there is nothing to add.
+  /// Defaults to `0` for a document migrated from before Milestone 19,
+  /// since no historical game in it has known hint usage yet.
+  final int totalHintsUsed;
+
+  /// The number of won games with *known*, exactly-zero hint usage
+  /// (`hintsUsed == 0`) — never incremented for a win with unknown hint
+  /// usage (`hintsUsed == null`), even though both "used no hints" and
+  /// "hint usage unknown" might look superficially similar. Conflating them
+  /// would misreport an old win of unknown hint usage as a genuine no-hint
+  /// win. Defaults to `0` for a document migrated from before Milestone 19.
+  final int hintFreeWins;
 
   /// Totals and wins keyed by secret-word length. Unmodifiable.
   final Map<int, GameOutcomeBreakdown> byWordLength;

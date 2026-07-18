@@ -20,6 +20,7 @@ CompletedGame _game({
   GameOutcome outcome = GameOutcome.won,
   int attemptsUsed = 3,
   int maxAttempts = 15,
+  int? hintsUsed,
 }) => CompletedGame(
   id: id,
   completedAt: completedAt ?? DateTime.utc(2026, 1, 1),
@@ -28,6 +29,7 @@ CompletedGame _game({
   outcome: outcome,
   attemptsUsed: attemptsUsed,
   maxAttempts: maxAttempts,
+  hintsUsed: hintsUsed,
 );
 
 /// A self-consistent version-2 document: [byWordLength]/[byDifficulty] sum
@@ -355,6 +357,217 @@ void main() {
     });
   });
 
+  group('Milestone 19: fewestAttemptsOnWins/totalHintsUsed/hintFreeWins', () {
+    test('fewestAttemptsOnWins is null until the first win', () async {
+      final repository = LocalStatisticsRepository(
+        store: FakePreferencesStore(),
+      );
+      final snapshot = await repository.recordCompletedGame(
+        _game(id: 'g1', outcome: GameOutcome.lost),
+      );
+      expect(snapshot.fewestAttemptsOnWins, isNull);
+    });
+
+    test('fewestAttemptsOnWins tracks the lowest attemptsUsed among wins '
+        'only', () async {
+      final repository = LocalStatisticsRepository(
+        store: FakePreferencesStore(),
+      );
+      await repository.recordCompletedGame(
+        _game(id: 'g1', outcome: GameOutcome.won, attemptsUsed: 6),
+      );
+      await repository.recordCompletedGame(
+        _game(id: 'g2', outcome: GameOutcome.lost, attemptsUsed: 1),
+      );
+      final snapshot = await repository.recordCompletedGame(
+        _game(id: 'g3', outcome: GameOutcome.won, attemptsUsed: 3),
+      );
+      expect(snapshot.fewestAttemptsOnWins, 3);
+    });
+
+    test('fewestAttemptsOnWins never increases once set', () async {
+      final repository = LocalStatisticsRepository(
+        store: FakePreferencesStore(),
+      );
+      await repository.recordCompletedGame(
+        _game(id: 'g1', outcome: GameOutcome.won, attemptsUsed: 2),
+      );
+      final snapshot = await repository.recordCompletedGame(
+        _game(id: 'g2', outcome: GameOutcome.won, attemptsUsed: 8),
+      );
+      expect(snapshot.fewestAttemptsOnWins, 2);
+    });
+
+    test('a win with unknown hintsUsed (null) is never counted as a '
+        'hint-free win and contributes nothing to totalHintsUsed', () async {
+      final repository = LocalStatisticsRepository(
+        store: FakePreferencesStore(),
+      );
+      final snapshot = await repository.recordCompletedGame(
+        _game(id: 'g1', outcome: GameOutcome.won, hintsUsed: null),
+      );
+      expect(snapshot.hintFreeWins, 0);
+      expect(snapshot.totalHintsUsed, 0);
+    });
+
+    test('a win with known, zero hintsUsed is counted as hint-free', () async {
+      final repository = LocalStatisticsRepository(
+        store: FakePreferencesStore(),
+      );
+      final snapshot = await repository.recordCompletedGame(
+        _game(id: 'g1', outcome: GameOutcome.won, hintsUsed: 0),
+      );
+      expect(snapshot.hintFreeWins, 1);
+      expect(snapshot.totalHintsUsed, 0);
+    });
+
+    test('a win with a positive hintsUsed is not hint-free but still adds '
+        'to totalHintsUsed', () async {
+      final repository = LocalStatisticsRepository(
+        store: FakePreferencesStore(),
+      );
+      final snapshot = await repository.recordCompletedGame(
+        _game(id: 'g1', outcome: GameOutcome.won, hintsUsed: 2),
+      );
+      expect(snapshot.hintFreeWins, 0);
+      expect(snapshot.totalHintsUsed, 2);
+    });
+
+    test('totalHintsUsed accumulates across wins and losses alike', () async {
+      final repository = LocalStatisticsRepository(
+        store: FakePreferencesStore(),
+      );
+      await repository.recordCompletedGame(
+        _game(id: 'g1', outcome: GameOutcome.won, hintsUsed: 1),
+      );
+      final snapshot = await repository.recordCompletedGame(
+        _game(id: 'g2', outcome: GameOutcome.lost, hintsUsed: 2),
+      );
+      expect(snapshot.totalHintsUsed, 3);
+      expect(snapshot.hintFreeWins, 0);
+    });
+
+    test('a lost game never counts toward hintFreeWins, even with '
+        'hintsUsed: 0', () async {
+      final repository = LocalStatisticsRepository(
+        store: FakePreferencesStore(),
+      );
+      final snapshot = await repository.recordCompletedGame(
+        _game(id: 'g1', outcome: GameOutcome.lost, hintsUsed: 0),
+      );
+      expect(snapshot.hintFreeWins, 0);
+    });
+  });
+
+  group('Milestone 19: version 2 -> 3 migration', () {
+    test('a v2 document with no hint/fewest-attempts fields loads with the '
+        'safe defaults — 0 hints tracked, 0 hint-free wins, never treating '
+        'unknown hint usage as hint-free', () async {
+      final doc = _validDocumentV2();
+      final store = FakePreferencesStore(
+        initialValues: {StorageKeys.statistics: jsonEncode(doc)},
+      );
+      final repository = LocalStatisticsRepository(store: store);
+
+      final snapshot = await repository.loadSnapshot();
+
+      expect(snapshot.totalHintsUsed, 0);
+      expect(snapshot.hintFreeWins, 0);
+    });
+
+    test('a v2 document\'s fewestAttemptsOnWins is recovered as the '
+        'minimum attemptsUsed among won games still present in '
+        'recentGames', () async {
+      final doc = _validDocumentV2(
+        wins: 2,
+        totalAttemptsOnWins: 9,
+        byWordLength: {
+          '5': {'totalGames': 2, 'wins': 2},
+        },
+        byDifficulty: {
+          'common': {'totalGames': 2, 'wins': 2},
+        },
+        recentGames: [
+          _game(id: 'g1', attemptsUsed: 6).toJson(),
+          _game(id: 'g2', attemptsUsed: 3).toJson(),
+        ],
+        recordedGameIds: ['g1', 'g2'],
+      );
+      final store = FakePreferencesStore(
+        initialValues: {StorageKeys.statistics: jsonEncode(doc)},
+      );
+      final repository = LocalStatisticsRepository(store: store);
+
+      final snapshot = await repository.loadSnapshot();
+
+      expect(snapshot.fewestAttemptsOnWins, 3);
+    });
+
+    test('a v2 document with no won games in recentGames migrates '
+        'fewestAttemptsOnWins to null', () async {
+      final doc = _validDocumentV2(
+        wins: 0,
+        losses: 1,
+        totalAttemptsOnWins: 0,
+        byWordLength: {
+          '5': {'totalGames': 1, 'wins': 0},
+        },
+        byDifficulty: {
+          'common': {'totalGames': 1, 'wins': 0},
+        },
+        recentGames: [
+          _game(id: 'g1', outcome: GameOutcome.lost, attemptsUsed: 15).toJson(),
+        ],
+        recordedGameIds: ['g1'],
+      );
+      final store = FakePreferencesStore(
+        initialValues: {StorageKeys.statistics: jsonEncode(doc)},
+      );
+      final repository = LocalStatisticsRepository(store: store);
+
+      final snapshot = await repository.loadSnapshot();
+
+      expect(snapshot.fewestAttemptsOnWins, isNull);
+    });
+
+    test('a game recorded after migrating from v2 has fully known hint '
+        'data, correctly counted from that point on', () async {
+      final doc = _validDocumentV2();
+      final store = FakePreferencesStore(
+        initialValues: {StorageKeys.statistics: jsonEncode(doc)},
+      );
+      final repository = LocalStatisticsRepository(store: store);
+
+      final snapshot = await repository.recordCompletedGame(
+        _game(id: 'g2', outcome: GameOutcome.won, hintsUsed: 0),
+      );
+
+      expect(snapshot.hintFreeWins, 1);
+      expect(snapshot.totalHintsUsed, 0);
+    });
+
+    test('migrating from v2 persists the current document version on the '
+        'next write', () async {
+      final doc = _validDocumentV2();
+      final store = FakePreferencesStore(
+        initialValues: {StorageKeys.statistics: jsonEncode(doc)},
+      );
+      final repository = LocalStatisticsRepository(store: store);
+
+      await repository.recordCompletedGame(
+        _game(id: 'g2', outcome: GameOutcome.lost),
+      );
+
+      final storedDoc =
+          jsonDecode(store.values[StorageKeys.statistics]!)
+              as Map<String, Object?>;
+      expect(storedDoc['version'], 3);
+      expect(storedDoc.containsKey('totalHintsUsed'), isTrue);
+      expect(storedDoc.containsKey('hintFreeWins'), isTrue);
+      expect(storedDoc.containsKey('fewestAttemptsOnWins'), isTrue);
+    });
+  });
+
   group('LocalStatisticsRepository.clearStatistics', () {
     test('resets to an empty snapshot', () async {
       final store = FakePreferencesStore();
@@ -536,7 +749,7 @@ void main() {
       expect(snapshot.recentGames.single.id, 'g1');
     });
 
-    test('a version-1 mutation writes version 2', () async {
+    test('a version-1 mutation writes the current document version', () async {
       final v1Json = jsonEncode({
         'version': 1,
         'wins': 1,
@@ -563,7 +776,7 @@ void main() {
 
       final storedRaw = store.values[StorageKeys.statistics]!;
       final storedDoc = jsonDecode(storedRaw) as Map<String, Object?>;
-      expect(storedDoc['version'], 2);
+      expect(storedDoc['version'], 3);
       expect(storedDoc['recordedGameIds'], containsAll(['g1', 'g2']));
 
       // The migration also proves itself functionally: re-recording the

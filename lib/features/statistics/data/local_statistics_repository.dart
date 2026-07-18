@@ -11,15 +11,18 @@ import '../models/game_outcome_breakdown.dart';
 import '../models/statistics_snapshot.dart';
 import 'statistics_repository.dart';
 
-/// The document version this implementation writes. Version 1 (no
-/// [_StatisticsDocument.recordedGameIds]) is still readable — see
-/// [_documentFromDoc] — but every write upgrades to this version.
-const int _currentDocumentVersion = 2;
+/// The document version this implementation writes. Version 3 adds
+/// [_StatisticsDocument.fewestAttemptsOnWins], [_StatisticsDocument.totalHintsUsed],
+/// and [_StatisticsDocument.hintFreeWins] (Milestone 19); versions 1 (no
+/// [_StatisticsDocument.recordedGameIds]) and 2 (no hint/fewest-attempts
+/// fields) are both still readable — see [_documentFromDoc] — but every
+/// write upgrades to this version.
+const int _currentDocumentVersion = 3;
 
 /// Every document version this implementation can read. Anything else
 /// (missing, `0`, or a future version this code predates) is rejected
 /// explicitly via [StatisticsRepositoryException] rather than guessed at.
-const Set<int> _supportedReadVersions = {1, 2};
+const Set<int> _supportedReadVersions = {1, 2, 3};
 
 /// The fully-durable persisted statistics state: a superset of
 /// [StatisticsSnapshot] that additionally tracks [recordedGameIds] — every
@@ -35,6 +38,9 @@ class _StatisticsDocument {
     required this.currentWinStreak,
     required this.bestWinStreak,
     required this.totalAttemptsOnWins,
+    required this.fewestAttemptsOnWins,
+    required this.totalHintsUsed,
+    required this.hintFreeWins,
     required this.byWordLength,
     required this.byDifficulty,
     required this.recentGames,
@@ -47,6 +53,9 @@ class _StatisticsDocument {
     currentWinStreak: 0,
     bestWinStreak: 0,
     totalAttemptsOnWins: 0,
+    fewestAttemptsOnWins: null,
+    totalHintsUsed: 0,
+    hintFreeWins: 0,
     byWordLength: const {},
     byDifficulty: const {},
     recentGames: const [],
@@ -58,6 +67,9 @@ class _StatisticsDocument {
   final int currentWinStreak;
   final int bestWinStreak;
   final int totalAttemptsOnWins;
+  final int? fewestAttemptsOnWins;
+  final int totalHintsUsed;
+  final int hintFreeWins;
   final Map<int, GameOutcomeBreakdown> byWordLength;
   final Map<DifficultyOption, GameOutcomeBreakdown> byDifficulty;
   final List<CompletedGame> recentGames;
@@ -74,6 +86,9 @@ class _StatisticsDocument {
     currentWinStreak: currentWinStreak,
     bestWinStreak: bestWinStreak,
     totalAttemptsOnWins: totalAttemptsOnWins,
+    fewestAttemptsOnWins: fewestAttemptsOnWins,
+    totalHintsUsed: totalHintsUsed,
+    hintFreeWins: hintFreeWins,
     byWordLength: byWordLength,
     byDifficulty: byDifficulty,
     recentGames: recentGames,
@@ -205,7 +220,8 @@ class LocalStatisticsRepository implements StatisticsRepository {
       // it from whatever ids remain in recentGames — anything already
       // truncated out of v1's recentGames is unrecoverable, but that is no
       // worse than v1's own recentGames-only duplicate protection ever
-      // provided. The next successful record/clear persists this as v2.
+      // provided. The next successful record/clear persists this as the
+      // current version.
       recordedGameIds = {for (final game in recentGames) game.id};
     } else {
       recordedGameIds = _decodeRecordedGameIds(doc['recordedGameIds']);
@@ -219,12 +235,51 @@ class LocalStatisticsRepository implements StatisticsRepository {
       }
     }
 
+    final int? fewestAttemptsOnWins;
+    final int totalHintsUsed;
+    final int hintFreeWins;
+    if (version < 3) {
+      // Migration (Milestone 19): versions 1 and 2 predate hint tracking
+      // and the fewest-attempts-on-wins record entirely, so there is no
+      // stored value for any of the three to read.
+      //
+      // totalHintsUsed/hintFreeWins: deliberately seeded at 0, never
+      // "recovered" from recentGames — every game already recorded under
+      // these older versions has unknown hint usage (CompletedGame.hintsUsed
+      // decodes as null for all of them, per its own migration rule), and
+      // "unknown" must never be counted as "used zero hints". Both counters
+      // become exact for every game recorded from this point on.
+      //
+      // fewestAttemptsOnWins: unlike hint usage, attemptsUsed was already
+      // tracked by every prior version, so this is recoverable — but only
+      // as a best-effort lower bound over whichever won games are still
+      // present in the bounded recentGames window; a win that already aged
+      // out of that window before this migration ran is unrecoverable. See
+      // StatisticsSnapshot.fewestAttemptsOnWins's own doc.
+      final recentWinAttempts = [
+        for (final game in recentGames)
+          if (game.outcome == GameOutcome.won) game.attemptsUsed,
+      ];
+      fewestAttemptsOnWins = recentWinAttempts.isEmpty
+          ? null
+          : recentWinAttempts.reduce(math.min);
+      totalHintsUsed = 0;
+      hintFreeWins = 0;
+    } else {
+      fewestAttemptsOnWins = _readOptionalInt(doc, 'fewestAttemptsOnWins');
+      totalHintsUsed = _requireInt(doc, 'totalHintsUsed');
+      hintFreeWins = _requireInt(doc, 'hintFreeWins');
+    }
+
     return _StatisticsDocument(
       wins: wins,
       losses: losses,
       currentWinStreak: currentWinStreak,
       bestWinStreak: bestWinStreak,
       totalAttemptsOnWins: totalAttemptsOnWins,
+      fewestAttemptsOnWins: fewestAttemptsOnWins,
+      totalHintsUsed: totalHintsUsed,
+      hintFreeWins: hintFreeWins,
       byWordLength: byWordLength,
       byDifficulty: byDifficulty,
       recentGames: recentGames,
@@ -380,6 +435,18 @@ class LocalStatisticsRepository implements StatisticsRepository {
     return value;
   }
 
+  /// Reads [key] as an `int?` — `null` is a valid, meaningful value (e.g.
+  /// "no win recorded yet"), unlike [_requireInt]'s fields, so this accepts
+  /// either an int or an explicit JSON `null`/absent key.
+  int? _readOptionalInt(Map<String, Object?> doc, String key) {
+    final value = doc[key];
+    if (value == null) return null;
+    if (value is! int) {
+      throw FormatException('"$key" must be an int or null');
+    }
+    return value;
+  }
+
   Map<String, Object?> _encode(_StatisticsDocument document) => {
     'version': _currentDocumentVersion,
     'wins': document.wins,
@@ -387,6 +454,9 @@ class LocalStatisticsRepository implements StatisticsRepository {
     'currentWinStreak': document.currentWinStreak,
     'bestWinStreak': document.bestWinStreak,
     'totalAttemptsOnWins': document.totalAttemptsOnWins,
+    'fewestAttemptsOnWins': document.fewestAttemptsOnWins,
+    'totalHintsUsed': document.totalHintsUsed,
+    'hintFreeWins': document.hintFreeWins,
     'byWordLength': {
       for (final entry in document.byWordLength.entries)
         '${entry.key}': entry.value.toJson(),
@@ -401,12 +471,13 @@ class LocalStatisticsRepository implements StatisticsRepository {
 }
 
 /// Folds [game] into [previous], updating every aggregate — win/loss
-/// counts, both streaks, the win-attempts total, the by-word-length and
-/// by-difficulty breakdowns, and [_StatisticsDocument.recordedGameIds] —
-/// independently of [_StatisticsDocument.recentGames], and only then
-/// prepends [game] to the (possibly truncated) recent-games list. This
-/// ordering is what keeps the aggregates (and the durable ID set) valid
-/// even once older games age out of the bounded recent list.
+/// counts, both streaks, the win-attempts total, the fewest-attempts
+/// record, the hint totals, the by-word-length and by-difficulty
+/// breakdowns, and [_StatisticsDocument.recordedGameIds] — independently of
+/// [_StatisticsDocument.recentGames], and only then prepends [game] to the
+/// (possibly truncated) recent-games list. This ordering is what keeps the
+/// aggregates (and the durable ID set) valid even once older games age out
+/// of the bounded recent list.
 _StatisticsDocument _applyCompletedGame(
   _StatisticsDocument previous,
   CompletedGame game,
@@ -415,6 +486,19 @@ _StatisticsDocument _applyCompletedGame(
 
   final currentWinStreak = won ? previous.currentWinStreak + 1 : 0;
   final bestWinStreak = math.max(previous.bestWinStreak, currentWinStreak);
+
+  final previousFewest = previous.fewestAttemptsOnWins;
+  final fewestAttemptsOnWins = won
+      ? (previousFewest == null
+            ? game.attemptsUsed
+            : math.min(previousFewest, game.attemptsUsed))
+      : previousFewest;
+
+  // See CompletedGame.hintsUsed's doc: null (unknown) contributes nothing to
+  // the running total and can never count as a hint-free win.
+  final hintsUsed = game.hintsUsed;
+  final totalHintsUsed = previous.totalHintsUsed + (hintsUsed ?? 0);
+  final hintFreeWins = previous.hintFreeWins + (won && hintsUsed == 0 ? 1 : 0);
 
   final byWordLength = Map<int, GameOutcomeBreakdown>.from(
     previous.byWordLength,
@@ -450,6 +534,9 @@ _StatisticsDocument _applyCompletedGame(
     bestWinStreak: bestWinStreak,
     totalAttemptsOnWins:
         previous.totalAttemptsOnWins + (won ? game.attemptsUsed : 0),
+    fewestAttemptsOnWins: fewestAttemptsOnWins,
+    totalHintsUsed: totalHintsUsed,
+    hintFreeWins: hintFreeWins,
     byWordLength: byWordLength,
     byDifficulty: byDifficulty,
     recentGames: truncatedRecentGames,

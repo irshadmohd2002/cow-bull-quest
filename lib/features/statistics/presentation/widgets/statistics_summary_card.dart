@@ -54,7 +54,7 @@ class _SummaryRow extends StatelessWidget {
 }
 
 /// Shows the aggregate numbers from a [StatisticsSnapshot]: total games,
-/// wins, losses, win rate, current streak, best streak, and average
+/// wins, losses, win rate, current streak, best streak, and average/fewest
 /// attempts on wins.
 ///
 /// Every number is communicated as text — never by color alone — so it
@@ -67,6 +67,7 @@ class StatisticsSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final averageAttempts = snapshot.averageAttemptsOnWins;
+    final fewestAttempts = snapshot.fewestAttemptsOnWins;
     final colorScheme = Theme.of(context).colorScheme;
     // The brand's gold accent, reserved for premium/reward moments — the
     // win rate is the one summary figure that earns it. Falls back to
@@ -110,6 +111,10 @@ class StatisticsSummaryCard extends StatelessWidget {
               value: averageAttempts == null
                   ? '—'
                   : averageAttempts.toStringAsFixed(1),
+            ),
+            _SummaryRow(
+              label: 'Fewest attempts (wins)',
+              value: fewestAttempts == null ? '—' : '$fewestAttempts',
             ),
           ],
         ),

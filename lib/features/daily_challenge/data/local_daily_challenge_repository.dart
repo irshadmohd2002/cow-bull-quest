@@ -41,6 +41,10 @@ class LocalDailyChallengeRepository implements DailyChallengeRepository {
       _enqueue(() async => (await _loadAll())[date.toIso8601String()]);
 
   @override
+  Future<List<DailyChallengeResult>> loadAllResults() =>
+      _enqueue(() async => (await _loadAll()).values.toList());
+
+  @override
   Future<DailyChallengeResult> recordIfFirst(DailyChallengeResult result) =>
       _enqueue(() async {
         final all = await _loadAll();

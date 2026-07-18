@@ -28,6 +28,7 @@ import 'features/game/models/game_difficulty.dart';
 import 'features/game/models/game_session.dart';
 import 'features/game/models/game_status.dart';
 import 'features/game/presentation/game_screen.dart';
+import 'features/game/services/coin_reward_calculator.dart';
 import 'features/game/services/game_engine.dart';
 import 'features/home/models/daily_challenge_card_status.dart';
 import 'features/home/presentation/home_screen.dart';
@@ -232,6 +233,12 @@ class _CowBullAppState extends State<CowBullApp> {
   static const DailyChallengeResultShareFormatter
   _dailyChallengeShareFormatter = DailyChallengeResultShareFormatter();
 
+  /// Computes Milestone 19's coin reward for a finished game or Daily
+  /// Challenge attempt. Stateless and pure, mirroring [_shareService]'s
+  /// reuse pattern.
+  static const CoinRewardCalculator _coinRewardCalculator =
+      CoinRewardCalculator();
+
   /// The settings instance actually in use — either [CowBullApp.settings]
   /// verbatim, or one freshly created here (non-persistent — see the
   /// class-level doc on [CowBullApp.settings]). Resolved once in [initState]
@@ -405,7 +412,13 @@ class _CowBullAppState extends State<CowBullApp> {
       difficulty: _toGameDifficulty(difficulty),
     );
     final streakFeedback = ValueNotifier<StreakFeedback?>(null);
-    final controller = GameController(
+    final coinsEarnedFeedback = ValueNotifier<CoinRewardBreakdown?>(null);
+    // `late final` (rather than a plain `final`), mirroring
+    // _startDailyChallenge below, so onGameCompleted can read
+    // controller.hintsUsedThisGame — needed for this game's coin reward —
+    // from inside the very closure passed to controller's own constructor.
+    late final GameController controller;
+    controller = GameController(
       wordRepository: widget.wordRepository,
       gameEngine: _gameEngine,
       coinWallet: _coinWallet,
@@ -415,7 +428,9 @@ class _CowBullAppState extends State<CowBullApp> {
         config: config,
         difficulty: difficulty,
         session: session,
+        hintsUsed: controller.hintsUsedThisGame,
         streakFeedback: streakFeedback,
+        coinsEarnedFeedback: coinsEarnedFeedback,
       ),
     );
     unawaited(
@@ -434,6 +449,7 @@ class _CowBullAppState extends State<CowBullApp> {
             onButtonTap: _audioFeedback.playButtonTap,
             shareService: _shareService,
             streakFeedback: streakFeedback,
+            coinsEarnedFeedback: coinsEarnedFeedback,
             currentStreak: _streakController.state.currentStreak,
           ),
         ),
@@ -457,9 +473,10 @@ class _CowBullAppState extends State<CowBullApp> {
   ///
   /// Replaying after completion is allowed (see `DailyChallengeController`'s
   /// class-level doc): [_recordDailyChallengeCompletion] is safe to call
-  /// again for the same date because both the streak and the official
-  /// result are idempotent per calendar day — a replay's completion changes
-  /// neither.
+  /// again for the same date because the streak, the official result, and
+  /// the coin reward (see [CoinRewardCalculator.rewardForDailyChallenge])
+  /// are all idempotent per calendar day — a replay's completion changes
+  /// none of them.
   Future<void> _startDailyChallenge(BuildContext context) async {
     _audioFeedback.playButtonTap();
     await _dailyChallengeController.refresh();
@@ -482,6 +499,7 @@ class _CowBullAppState extends State<CowBullApp> {
       secretWord: secretWord,
     );
     final streakFeedback = ValueNotifier<StreakFeedback?>(null);
+    final coinsEarnedFeedback = ValueNotifier<CoinRewardBreakdown?>(null);
     late final GameController controller;
     controller = GameController(
       wordRepository: dailyWordRepository,
@@ -494,6 +512,7 @@ class _CowBullAppState extends State<CowBullApp> {
             session: session,
             hintsUsed: controller.hintsUsedThisGame,
             streakFeedback: streakFeedback,
+            coinsEarnedFeedback: coinsEarnedFeedback,
           ),
     );
     unawaited(
@@ -510,6 +529,7 @@ class _CowBullAppState extends State<CowBullApp> {
             onButtonTap: _audioFeedback.playButtonTap,
             shareService: _shareService,
             streakFeedback: streakFeedback,
+            coinsEarnedFeedback: coinsEarnedFeedback,
             resultTextBuilder: (state, hintsUsed) =>
                 _formatDailyChallengeShareText(),
           ),
@@ -560,12 +580,22 @@ class _CowBullAppState extends State<CowBullApp> {
   /// one first on a given day is what actually earns that day's streak; the
   /// other later that same day is naturally a no-op via
   /// `StreakController`'s own same-day dedupe.
+  ///
+  /// Also grants this game's Milestone 19 coin reward (see
+  /// [CoinRewardCalculator.rewardForGame] and [_awardCoinReward]) —
+  /// [CoinRewardBreakdown.none] for a loss, and always computed from
+  /// [hintsUsed] as it stood at the exact moment this game completed, never
+  /// a later, possibly-stale read. The same [hintsUsed] is also stored on
+  /// the [CompletedGame] record itself, feeding the Statistics screen's
+  /// hint-usage aggregates (`totalHintsUsed`/`hintFreeWins`).
   void _recordCompletedGame({
     required String id,
     required GameConfig config,
     required DifficultyOption difficulty,
     required GameSession session,
+    required int hintsUsed,
     required ValueNotifier<StreakFeedback?> streakFeedback,
+    required ValueNotifier<CoinRewardBreakdown?> coinsEarnedFeedback,
   }) {
     final outcome = session.status == GameStatus.won
         ? GameOutcome.won
@@ -580,10 +610,19 @@ class _CowBullAppState extends State<CowBullApp> {
           outcome: outcome,
           attemptsUsed: session.attemptsUsed,
           maxAttempts: session.maxAttempts,
+          hintsUsed: hintsUsed,
         ),
       ),
     );
     _recordStreakQualifyingCompletion(streakFeedback);
+    _awardCoinReward(
+      _coinRewardCalculator.rewardForGame(
+        won: outcome == GameOutcome.won,
+        difficulty: config.difficulty,
+        hintsUsed: hintsUsed,
+      ),
+      coinsEarnedFeedback,
+    );
   }
 
   /// Maps a just-finished Daily Challenge [session] onto a neutral
@@ -592,12 +631,22 @@ class _CowBullAppState extends State<CowBullApp> {
   /// the *first* completion for [date] as official — a later completion
   /// (a practice replay) is a safe no-op here. Also records today's
   /// qualifying streak completion, exactly like [_recordCompletedGame].
+  ///
+  /// [isOfficial] is derived *before* [DailyChallengeController.recordIfFirst]
+  /// is called — from whether [_dailyChallengeController] has no official
+  /// result for today yet — since that call itself mutates
+  /// `officialResultToday`; reading it after would make every completion,
+  /// official or not, see a non-null result and misreport as official. This
+  /// mirrors [CoinRewardCalculator.rewardForDailyChallenge]'s own
+  /// requirement that only the day's first completion ever earns coins.
   void _recordDailyChallengeCompletion({
     required LocalDate date,
     required GameSession session,
     required int hintsUsed,
     required ValueNotifier<StreakFeedback?> streakFeedback,
+    required ValueNotifier<CoinRewardBreakdown?> coinsEarnedFeedback,
   }) {
+    final isOfficial = _dailyChallengeController.officialResultToday == null;
     final guesses = [
       for (final guess in session.guesses)
         DailyChallengeGuessRecord(
@@ -619,6 +668,49 @@ class _CowBullAppState extends State<CowBullApp> {
       ),
     );
     _recordStreakQualifyingCompletion(streakFeedback);
+    _awardCoinReward(
+      _coinRewardCalculator.rewardForDailyChallenge(
+        won: session.status == GameStatus.won,
+        isOfficial: isOfficial,
+        hintsUsed: hintsUsed,
+      ),
+      coinsEarnedFeedback,
+    );
+  }
+
+  /// Grants [reward] (a no-op for [CoinRewardBreakdown.none], e.g. a loss or
+  /// a Daily Challenge replay) via [_coinWallet] and reports it through
+  /// [feedback] (read by [GameScreen]'s completed view), mirroring
+  /// [_recordStreakQualifyingCompletion]'s "grant, then report" shape.
+  /// `feedback.value` is left `null` — rather than [CoinRewardBreakdown.none]
+  /// — whenever nothing was earned, so the completed view can treat "show a
+  /// coin-reward breakdown" and "earned zero coins" as the same, simpler
+  /// case: show nothing.
+  ///
+  /// The *visual* feedback above is set immediately, synchronously, exactly
+  /// like every other completion feedback this composition root reports
+  /// (streak, statistics) — it reflects in-memory truth the instant the
+  /// reward is granted and never waits on persistence, consistent with this
+  /// app's "in-memory state is authoritative regardless of write outcome"
+  /// philosophy (see `CoinWallet`'s class-level doc). The *audio/haptic*
+  /// feedback ([AudioFeedbackCoordinator.onCoinsEarned]) is different: it is
+  /// wired through [CoinWallet.earn]'s `onPersisted` callback specifically
+  /// so it fires only once the reward is actually durably saved — see
+  /// [CoinWallet.earn]'s own doc for why a sensory cue implying "this is now
+  /// safely recorded" would be misleading to play before that is true. A
+  /// failed persistence write therefore still shows the coin breakdown (the
+  /// player did win it) but never plays the haptic.
+  void _awardCoinReward(
+    CoinRewardBreakdown reward,
+    ValueNotifier<CoinRewardBreakdown?> feedback,
+  ) {
+    if (reward.rewarded) {
+      _coinWallet.earn(
+        reward.totalCoinsEarned,
+        onPersisted: _audioFeedback.onCoinsEarned,
+      );
+    }
+    feedback.value = reward.rewarded ? reward : null;
   }
 
   /// Records today's qualifying streak completion and reports the outcome
@@ -790,12 +882,19 @@ class _CowBullAppState extends State<CowBullApp> {
           listenable: Listenable.merge([
             _statisticsController,
             _streakController,
+            _coinWallet,
+            _dailyChallengeController,
           ]),
           builder: (context, _) => StatisticsScreen(
             state: _statisticsController.state,
             onClearStatistics: _statisticsController.clear,
             currentStreak: _streakController.state.currentStreak,
             longestStreak: _streakController.state.longestStreak,
+            coinBalance: _coinWallet.balance,
+            totalCoinsEarned: _coinWallet.totalCoinsEarned,
+            totalCoinsSpent: _coinWallet.totalCoinsSpent,
+            dailyChallengesCompleted: _dailyChallengeController.completedCount,
+            dailyChallengesWon: _dailyChallengeController.wonCount,
           ),
         ),
       ),
