@@ -1412,6 +1412,17 @@ void main() {
       'sharing the Daily Challenge result contains the date, aggregate '
       'bulls/cows, and never the secret word — even after a practice replay',
       (tester) async {
+        // A tall viewport: the completed view's content (outcome card, the
+        // Milestone 20 Daily Challenge replay notice on the second win,
+        // guess history, and two full button rows) no longer fits
+        // comfortably in the default 800x600 test surface without the Copy
+        // button landing flush against the bottom edge, where a `tap()`
+        // computed at its exact center can miss it entirely.
+        tester.view.physicalSize = const Size(800, 1400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
         final repo = _FakeWordRepository()
           ..wordsByLength[4] = 'lace'
           ..secretWordsByLengthAndDifficulty[(4, GameDifficulty.common)] = [
@@ -1473,6 +1484,50 @@ void main() {
 
         expect(clipboardCalls, hasLength(2));
         expect(clipboardCalls[1]['text'], officialText);
+      },
+    );
+  });
+
+  group('Milestone 20: abandoning the Daily Challenge', () {
+    LocalDate today() => LocalDate(year: 2026, month: 7, day: 18);
+
+    testWidgets(
+      'leaving the Daily Challenge after an accepted guess does not record '
+      'a completion, award coins, or update the streak',
+      (tester) async {
+        final repo = _FakeWordRepository()
+          ..wordsByLength[4] = 'lace'
+          ..allowedWordsByLength[4] = {'lace', 'race'}
+          ..secretWordsByLengthAndDifficulty[(4, GameDifficulty.common)] = [
+            'lace',
+          ];
+        await tester.pumpWidget(
+          CowBullApp(
+            wordRepository: repo,
+            clock: FakeLocalDateProvider(today()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Daily Challenge'));
+        await tester.tap(find.text('Daily Challenge'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField), 'race');
+        await tester.tap(find.text('Submit'));
+        await tester.pumpAndSettle();
+
+        // Leaving now (one guess accepted, game still active) must show the
+        // leave confirmation, then actually pop once confirmed.
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.text('Leave this game?'), findsOneWidget);
+        await tester.tap(find.text('Leave'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Not played'), findsOneWidget);
+        expect(find.text('100'), findsOneWidget); // coin balance untouched
+        expect(find.text('0-day streak'), findsOneWidget);
       },
     );
   });
@@ -1584,7 +1639,7 @@ void main() {
         await enterAndSubmit(tester, 'mock');
       }
 
-      expect(find.text('You lost'), findsOneWidget);
+      expect(find.text('Not solved'), findsOneWidget);
       expect(find.textContaining('Coins earned'), findsNothing);
       expect(find.text('100'), findsOneWidget);
     });

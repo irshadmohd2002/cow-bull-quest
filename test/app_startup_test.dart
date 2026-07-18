@@ -9,6 +9,7 @@ import 'package:cowbullgame/coin_wallet.dart';
 import 'package:cowbullgame/core/persistence/storage_keys.dart';
 import 'package:cowbullgame/core/time/local_date.dart';
 import 'package:cowbullgame/features/daily_challenge/controllers/daily_challenge_controller.dart';
+import 'package:cowbullgame/features/onboarding/controllers/onboarding_controller.dart';
 import 'package:cowbullgame/features/streak/controllers/streak_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -34,6 +35,7 @@ Future<AppBootstrap> _succeedingLoader() async {
     clock: clock,
     streakController: StreakController(clock: clock),
     dailyChallengeController: DailyChallengeController(clock: clock),
+    onboardingController: OnboardingController(initialCompleted: true),
   );
 }
 
@@ -215,6 +217,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(callCount, 1);
 
+        await tester.ensureVisible(find.text('Reset local data'));
         await tester.tap(find.text('Reset local data'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Reset'));
@@ -255,6 +258,106 @@ void main() {
 
       expect(find.text('Start Game'), findsOneWidget);
       expect(callCount, 2);
+    });
+  });
+
+  group('Settings-triggered reset (mid-session)', () {
+    Future<AppBootstrap> loaderReading(FakePreferencesStore store) async {
+      final wallet = await CoinWallet.load(store);
+      final clock = FakeLocalDateProvider(
+        LocalDate(year: 2026, month: 7, day: 18),
+      );
+      final audioFeedbackSettings = AudioFeedbackSettings();
+      return AppBootstrap(
+        settings: AppSettings(),
+        statisticsRepository: FakeStatisticsRepository(),
+        coinWallet: wallet,
+        audioFeedbackSettings: audioFeedbackSettings,
+        audioFeedback: AudioFeedbackCoordinator(
+          audioService: FakeAudioService(),
+          hapticService: FakeHapticService(),
+          settings: audioFeedbackSettings,
+        ),
+        clock: clock,
+        streakController: StreakController(clock: clock),
+        dailyChallengeController: DailyChallengeController(clock: clock),
+        onboardingController: OnboardingController(initialCompleted: true),
+      );
+    }
+
+    testWidgets(
+      'confirming "Reset local data" in Settings clears storage and lands '
+      'back on a freshly reloaded Home screen',
+      (tester) async {
+        final store = FakePreferencesStore(
+          initialValues: {
+            StorageKeys.coinBalance: '80',
+            StorageKeys.themePreference: 'dark',
+          },
+        );
+        var loadCount = 0;
+        Future<AppBootstrap> loader() {
+          loadCount++;
+          return loaderReading(store);
+        }
+
+        await tester.pumpWidget(
+          AppStartup(loadBootstrap: loader, resetStore: store),
+        );
+        await tester.pumpAndSettle();
+        expect(loadCount, 1);
+        expect(find.text('80'), findsOneWidget);
+
+        await tester.ensureVisible(find.text('Settings'));
+        await tester.tap(find.text('Settings'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Reset local data'));
+        await tester.tap(find.text('Reset local data'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Reset'));
+        await tester.pumpAndSettle();
+
+        expect(loadCount, 2);
+        // CoinWallet.load immediately backfills a fresh default balance the
+        // instant it sees a missing one (see its own doc), so `coinBalance`
+        // legitimately exists again right after the reload — themePreference
+        // is never backfilled that way (AppSettings.load only ever reads a
+        // fallback in-memory, never writes it back), so its absence is what
+        // actually proves the reset+reload cycle ran.
+        expect(store.values.containsKey(StorageKeys.themePreference), isFalse);
+        expect(find.text('Start Game'), findsOneWidget);
+        expect(find.text('100'), findsOneWidget);
+      },
+    );
+
+    testWidgets('cancelling the Settings reset dialog leaves storage and '
+        'the current screen untouched', (tester) async {
+      final store = FakePreferencesStore(
+        initialValues: {StorageKeys.coinBalance: '80'},
+      );
+      var loadCount = 0;
+      Future<AppBootstrap> loader() {
+        loadCount++;
+        return loaderReading(store);
+      }
+
+      await tester.pumpWidget(
+        AppStartup(loadBootstrap: loader, resetStore: store),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Settings'));
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Reset local data'));
+      await tester.tap(find.text('Reset local data'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(loadCount, 1);
+      expect(store.values[StorageKeys.coinBalance], '80');
+      expect(find.text('Follow system'), findsOneWidget); // still on Settings
     });
   });
 }

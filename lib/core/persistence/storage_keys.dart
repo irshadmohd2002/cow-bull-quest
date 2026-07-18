@@ -42,4 +42,11 @@ abstract final class StorageKeys {
   /// `coin_wallet.dart`). Absent on any installation that predates Milestone
   /// 19 — [CoinWallet] treats a missing value as `0`, never as an error.
   static const String totalCoinsSpent = 'total_coins_spent';
+
+  /// The persisted onboarding-completed `'true'`/`'false'` value (see
+  /// `features/onboarding/data/local_onboarding_repository.dart`). Absent on
+  /// a genuinely fresh install (onboarding not yet shown) and, deliberately,
+  /// on any installation that predates Milestone 20 until this app resolves
+  /// that ambiguity — see `OnboardingController.load`.
+  static const String onboardingCompleted = 'onboarding_completed';
 }

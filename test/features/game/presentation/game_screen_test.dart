@@ -78,6 +78,7 @@ void main() {
     ValueNotifier<CoinRewardBreakdown?>? coinsEarnedFeedback,
     int? currentStreak,
     ResultTextBuilder? resultTextBuilder,
+    ValueNotifier<bool?>? dailyChallengeReplayFeedback,
   }) {
     return MaterialApp(
       home: GameScreen(
@@ -89,6 +90,7 @@ void main() {
         coinsEarnedFeedback: coinsEarnedFeedback,
         currentStreak: currentStreak,
         resultTextBuilder: resultTextBuilder,
+        dailyChallengeReplayFeedback: dailyChallengeReplayFeedback,
       ),
     );
   }
@@ -346,7 +348,7 @@ void main() {
     }
     await enterAndSubmit(tester, 'mock');
 
-    expect(find.text('You lost'), findsOneWidget);
+    expect(find.text('Not solved'), findsOneWidget);
     expect(find.textContaining('LACE'), findsWidgets);
   });
 
@@ -1186,7 +1188,7 @@ void main() {
         await enterAndSubmit(tester, 'mock');
       }
 
-      expect(find.text('You lost'), findsOneWidget);
+      expect(find.text('Not solved'), findsOneWidget);
       expect(find.text('Hints used: 0'), findsOneWidget);
     });
 
@@ -1301,7 +1303,7 @@ void main() {
         await enterAndSubmit(tester, 'mock');
       }
 
-      expect(find.text('You lost'), findsOneWidget);
+      expect(find.text('Not solved'), findsOneWidget);
       expect(find.text('Share Result'), findsOneWidget);
     });
 
@@ -2154,9 +2156,322 @@ void main() {
           await enterAndSubmit(tester, 'mock');
         }
 
-        expect(find.text('You lost'), findsOneWidget);
+        expect(find.text('Not solved'), findsOneWidget);
         expect(find.textContaining('Coins earned'), findsNothing);
       },
     );
+  });
+
+  group('Milestone 20: restart/leave confirmation', () {
+    /// Wraps [GameScreen] as a pushed route (like a real game flow) so
+    /// system-back/leave-confirmation tests have a previous route to
+    /// return to.
+    Future<void> pushGameScreen(
+      WidgetTester tester,
+      GameController controller,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          GameScreen(controller: controller, config: config4),
+                    ),
+                  ),
+                  child: const Text('Go to game'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Go to game'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the Restart action is not shown before the game becomes '
+        'active', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await tester.pumpWidget(buildSubject(controller, config4));
+
+      expect(find.byTooltip('Restart game'), findsNothing);
+    });
+
+    testWidgets('leaving before any guess is accepted pops without a '
+        'confirmation dialog', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await pushGameScreen(tester, controller);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Leave this game?'), findsNothing);
+      expect(find.text('Go to game'), findsOneWidget);
+    });
+
+    testWidgets('leaving after an accepted guess shows a confirmation '
+        'dialog and does not pop until confirmed', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await pushGameScreen(tester, controller);
+      await enterAndSubmit(tester, 'race');
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Leave this game?'), findsOneWidget);
+      expect(find.text('Your current guesses will be lost.'), findsOneWidget);
+      // Still on the gameplay screen — the dialog blocked the pop.
+      expect(find.text('Go to game'), findsNothing);
+    });
+
+    testWidgets('cancelling "Leave this game?" keeps the game open', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await pushGameScreen(tester, controller);
+      await enterAndSubmit(tester, 'race');
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Keep playing'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Go to game'), findsNothing);
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('confirming "Leave this game?" returns to the previous '
+        'screen', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await pushGameScreen(tester, controller);
+      await enterAndSubmit(tester, 'race');
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Leave'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Go to game'), findsOneWidget);
+    });
+
+    testWidgets('no leave confirmation is shown once the game is complete', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await pushGameScreen(tester, controller);
+      await enterAndSubmit(tester, 'lace');
+      expect(find.text('You won!'), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Leave this game?'), findsNothing);
+      expect(find.text('Go to game'), findsOneWidget);
+    });
+
+    testWidgets('tapping Restart before any guess is accepted restarts '
+        'immediately, with no confirmation dialog', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Restart game'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Restart game?'), findsNothing);
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('tapping Restart after an accepted guess shows a '
+        'confirmation dialog', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'race');
+
+      await tester.tap(find.byTooltip('Restart game'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Restart game?'), findsOneWidget);
+      expect(
+        find.text('Your current guesses will be cleared.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('confirming the restart dialog clears the attempt count', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'race');
+      expect(find.textContaining('1 of 10 attempts used'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Restart game'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Restart'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('0 of 10 attempts used'), findsOneWidget);
+    });
+
+    testWidgets('cancelling the restart dialog leaves the game unchanged', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'race');
+
+      await tester.tap(find.byTooltip('Restart game'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('1 of 10 attempts used'), findsOneWidget);
+    });
+
+    testWidgets('a rapid double-tap on Restart opens at most one '
+        'confirmation dialog', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'race');
+
+      await tester.tap(find.byTooltip('Restart game'));
+      await tester.tap(find.byTooltip('Restart game'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Restart game?'), findsOneWidget);
+    });
+
+    testWidgets('a rapid double back-gesture opens at most one leave '
+        'confirmation dialog', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await pushGameScreen(tester, controller);
+      await enterAndSubmit(tester, 'race');
+
+      final backButton = find.byType(BackButton);
+      await tester.tap(backButton);
+      await tester.tap(backButton, warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Leave this game?'), findsOneWidget);
+    });
+  });
+
+  group('Milestone 20: Daily Challenge replay notice', () {
+    testWidgets('is not shown for a normal game (feedback left null)', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(find.textContaining('Daily Challenge replay'), findsNothing);
+    });
+
+    testWidgets('is not shown when the feedback is false (official '
+        'attempt)', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      final replayFeedback = ValueNotifier<bool?>(false);
+      await tester.pumpWidget(
+        buildSubject(
+          controller,
+          config4,
+          dailyChallengeReplayFeedback: replayFeedback,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(find.textContaining('Daily Challenge replay'), findsNothing);
+    });
+
+    testWidgets('is shown, stating no additional coins are earned, when the '
+        'feedback is true (a replay)', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+      final replayFeedback = ValueNotifier<bool?>(true);
+      await tester.pumpWidget(
+        buildSubject(
+          controller,
+          config4,
+          dailyChallengeReplayFeedback: replayFeedback,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(
+        find.textContaining('does not earn additional coins'),
+        findsOneWidget,
+      );
+    });
   });
 }

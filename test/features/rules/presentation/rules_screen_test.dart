@@ -1,10 +1,13 @@
 import 'package:cowbullgame/features/rules/presentation/rules_screen.dart';
+import 'package:cowbullgame/widgets/bulls_cows_example.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  Widget buildSubject() {
-    return const MaterialApp(home: RulesScreen());
+  Widget buildSubject({VoidCallback? onViewTutorial}) {
+    return MaterialApp(
+      home: RulesScreen(onViewTutorial: onViewTutorial ?? () {}),
+    );
   }
 
   testWidgets('shows the title', (tester) async {
@@ -87,24 +90,50 @@ void main() {
     });
   });
 
-  testWidgets('renders both worked examples', (tester) async {
+  testWidgets('renders both worked examples using 4-letter words', (
+    tester,
+  ) async {
     await tester.pumpWidget(buildSubject());
-    expect(find.text('Secret: APPLE'), findsOneWidget);
-    expect(find.text('Guess: AMPLE'), findsOneWidget);
-    expect(find.text('Secret: SPEED'), findsOneWidget);
-    expect(find.text('Guess: EERIE'), findsOneWidget);
+    expect(find.text('Secret: LAMP'), findsOneWidget);
+    expect(find.text('Guess: LAMB'), findsOneWidget);
+    expect(find.text('Secret: SEED'), findsOneWidget);
+    expect(find.text('Guess: DEER'), findsOneWidget);
   });
 
   testWidgets('exposes example results as text', (tester) async {
     await tester.pumpWidget(buildSubject());
-    expect(find.textContaining('Bulls: 4   Cows: 0'), findsOneWidget);
-    expect(find.textContaining('Bulls: 0   Cows: 2'), findsOneWidget);
+    expect(find.textContaining('Bulls: 3   Cows: 0'), findsOneWidget);
+    expect(find.textContaining('Bulls: 2   Cows: 1'), findsOneWidget);
   });
 
   testWidgets('exposes example results through semantics', (tester) async {
     await tester.pumpWidget(buildSubject());
-    expect(find.bySemanticsLabel(RegExp('4 bulls, 0 cows')), findsOneWidget);
-    expect(find.bySemanticsLabel(RegExp('0 bulls, 2 cows')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('3 bulls, 0 cows')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('2 bulls, 1 cow')), findsOneWidget);
+  });
+
+  testWidgets('shows the visual Bulls/Cows example with non-color '
+      'semantics', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    expect(find.byType(BullsCowsExample), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        RegExp(r'(?=.*Bull)(?=.*Cow)(?=.*not in the word)', dotAll: true),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('shows a View Tutorial entry point that invokes the callback', (
+    tester,
+  ) async {
+    var tapped = false;
+    await tester.pumpWidget(buildSubject(onViewTutorial: () => tapped = true));
+
+    await tester.tap(find.text('Tutorial'));
+    await tester.pumpAndSettle();
+
+    expect(tapped, isTrue);
   });
 
   testWidgets('scrolls on a narrow display without overflowing', (

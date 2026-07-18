@@ -32,6 +32,8 @@ import 'features/game/services/coin_reward_calculator.dart';
 import 'features/game/services/game_engine.dart';
 import 'features/home/models/daily_challenge_card_status.dart';
 import 'features/home/presentation/home_screen.dart';
+import 'features/onboarding/controllers/onboarding_controller.dart';
+import 'features/onboarding/presentation/onboarding_screen.dart';
 import 'features/rules/presentation/rules_screen.dart';
 import 'features/settings/presentation/settings_screen.dart';
 import 'features/statistics/controllers/statistics_controller.dart';
@@ -122,6 +124,8 @@ class CowBullApp extends StatefulWidget {
     this.audioFeedback,
     this.streakController,
     this.dailyChallengeController,
+    this.onboardingController,
+    this.onResetLocalData,
     LocalDateProvider? clock,
     String? privacyPolicyUrl,
     UrlLauncher? urlLauncher,
@@ -188,6 +192,29 @@ class CowBullApp extends StatefulWidget {
   /// — the same semantics as [streakController]. When non-null, the caller
   /// retains ownership.
   final DailyChallengeController? dailyChallengeController;
+
+  /// An externally-owned onboarding-completion controller, or `null` to let
+  /// this widget create its own **non-persistent, in-memory only** fallback
+  /// that starts already completed — the same fallback semantics as
+  /// [settings] (see its doc above), except the fallback's *value* also
+  /// differs from a real first launch: a widget test or other embedding that
+  /// doesn't inject this explicitly should see the normal Home screen, not
+  /// onboarding, unless it deliberately asks for onboarding by injecting a
+  /// fresh [OnboardingController]. When non-null, the caller retains
+  /// ownership. The real, persistent app entry point always injects an
+  /// `AppBootstrap`-loaded controller, exactly as it does for [settings].
+  final OnboardingController? onboardingController;
+
+  /// Clears every locally-stored preference and progress, then reloads a
+  /// fresh app state, or `null` to render Settings' "Reset local data" row
+  /// disabled/hidden entirely — the same "`null` gates visibility" pattern
+  /// [onOpenPrivacyPolicy] uses. `null` in every widget test that doesn't
+  /// inject it, since a full reset only makes sense wired to the real
+  /// [AppStartup]/[AppBootstrap] reload cycle (see `app_startup.dart`),
+  /// which owns actually recreating this widget's controllers — this widget
+  /// has no way to reset its own already-resolved `late final` fields on
+  /// its own.
+  final Future<void> Function()? onResetLocalData;
 
   /// The single source of "today" this widget uses wherever it needs the
   /// current calendar date (seeding [streakController]/
@@ -307,6 +334,16 @@ class _CowBullAppState extends State<CowBullApp> {
   /// instance.
   late final bool _ownsDailyChallengeController;
 
+  /// The onboarding-completion controller actually in use. Resolved once in
+  /// [initState], mirroring [_settings]: while [OnboardingController.completed]
+  /// is `false`, [build] shows [OnboardingScreen] in place of [HomeScreen].
+  late final OnboardingController _onboardingController;
+
+  /// Whether this state created [_onboardingController] itself and
+  /// therefore must dispose it. `false` when it is an externally-injected
+  /// instance.
+  late final bool _ownsOnboardingController;
+
   /// The single [StatisticsController] for the app's lifetime, wrapping
   /// [CowBullApp.statisticsRepository]. Always created and disposed by this
   /// state — unlike [_settings], there is no externally-injected seam for
@@ -372,6 +409,17 @@ class _CowBullAppState extends State<CowBullApp> {
       _dailyChallengeController = DailyChallengeController(clock: widget.clock);
       _ownsDailyChallengeController = true;
     }
+    final injectedOnboardingController = widget.onboardingController;
+    if (injectedOnboardingController != null) {
+      _onboardingController = injectedOnboardingController;
+      _ownsOnboardingController = false;
+    } else {
+      // Starts already completed — see OnboardingController's own doc — so
+      // a widget test or embedding that doesn't care about onboarding sees
+      // the normal Home screen by default.
+      _onboardingController = OnboardingController(initialCompleted: true);
+      _ownsOnboardingController = true;
+    }
   }
 
   @override
@@ -382,6 +430,7 @@ class _CowBullAppState extends State<CowBullApp> {
     if (_ownsAudioFeedbackSettings) _audioFeedbackSettings.dispose();
     if (_ownsStreakController) _streakController.dispose();
     if (_ownsDailyChallengeController) _dailyChallengeController.dispose();
+    if (_ownsOnboardingController) _onboardingController.dispose();
     _statisticsController.dispose();
     super.dispose();
   }
@@ -500,6 +549,7 @@ class _CowBullAppState extends State<CowBullApp> {
     );
     final streakFeedback = ValueNotifier<StreakFeedback?>(null);
     final coinsEarnedFeedback = ValueNotifier<CoinRewardBreakdown?>(null);
+    final dailyChallengeReplayFeedback = ValueNotifier<bool?>(null);
     late final GameController controller;
     controller = GameController(
       wordRepository: dailyWordRepository,
@@ -513,6 +563,7 @@ class _CowBullAppState extends State<CowBullApp> {
             hintsUsed: controller.hintsUsedThisGame,
             streakFeedback: streakFeedback,
             coinsEarnedFeedback: coinsEarnedFeedback,
+            dailyChallengeReplayFeedback: dailyChallengeReplayFeedback,
           ),
     );
     unawaited(
@@ -530,6 +581,7 @@ class _CowBullAppState extends State<CowBullApp> {
             shareService: _shareService,
             streakFeedback: streakFeedback,
             coinsEarnedFeedback: coinsEarnedFeedback,
+            dailyChallengeReplayFeedback: dailyChallengeReplayFeedback,
             resultTextBuilder: (state, hintsUsed) =>
                 _formatDailyChallengeShareText(),
           ),
@@ -547,6 +599,20 @@ class _CowBullAppState extends State<CowBullApp> {
   /// normal sequential navigation (open Rules, return, open Settings) is
   /// never blocked.
   bool _isNavigating = false;
+
+  /// Mirrors [_isNavigating], but scoped separately for the Tutorial replay
+  /// specifically (see [_openTutorial]) — unlike every other [_pushOnce]
+  /// caller (Start Game, Rules, Settings, Statistics), which is only ever
+  /// invoked from Home, the Tutorial replay is pushed from *within* an
+  /// already-pushed screen (Settings or Rules) whose own [_isNavigating]
+  /// guard stays `true` for that entire screen's lifetime (it only clears
+  /// once that screen's own `Navigator.push` future resolves, i.e. once it
+  /// is popped). Sharing [_isNavigating] for this push would therefore
+  /// permanently block it for as long as Settings/Rules stays open — this
+  /// separate flag still debounces a rapid double-tap on "View Tutorial"
+  /// itself, without being blocked by an unrelated, still-open ancestor
+  /// push.
+  bool _isNavigatingToTutorial = false;
 
   Future<void> _pushOnce(BuildContext context, WidgetBuilder builder) async {
     if (_isNavigating) return;
@@ -645,8 +711,10 @@ class _CowBullAppState extends State<CowBullApp> {
     required int hintsUsed,
     required ValueNotifier<StreakFeedback?> streakFeedback,
     required ValueNotifier<CoinRewardBreakdown?> coinsEarnedFeedback,
+    required ValueNotifier<bool?> dailyChallengeReplayFeedback,
   }) {
     final isOfficial = _dailyChallengeController.officialResultToday == null;
+    dailyChallengeReplayFeedback.value = !isOfficial;
     final guesses = [
       for (final guess in session.guesses)
         DailyChallengeGuessRecord(
@@ -800,7 +868,12 @@ class _CowBullAppState extends State<CowBullApp> {
 
   void _openRules(BuildContext context) {
     _audioFeedback.playButtonTap();
-    unawaited(_pushOnce(context, (_) => const RulesScreen()));
+    unawaited(
+      _pushOnce(
+        context,
+        (_) => RulesScreen(onViewTutorial: () => _openTutorial(context)),
+      ),
+    );
   }
 
   void _openSettings(BuildContext context) {
@@ -826,9 +899,40 @@ class _CowBullAppState extends State<CowBullApp> {
             onMusicChanged: _audioFeedbackSettings.setMusicEnabled,
             hapticsEnabled: _audioFeedbackSettings.hapticsEnabled,
             onHapticsChanged: _audioFeedbackSettings.setHapticsEnabled,
+            onViewTutorial: () => _openTutorial(context),
+            onResetLocalData: widget.onResetLocalData,
           ),
         ),
       ),
+    );
+  }
+
+  /// Opens [OnboardingScreen] as a normal pushed route — used only for a
+  /// *manual* "View Tutorial" replay from Settings or Rules, never for
+  /// first-launch onboarding itself (see [build], which shows
+  /// [OnboardingScreen] in place of Home instead, with no push/pop at all).
+  ///
+  /// [OnboardingScreen.onDone] here simply pops the route — it deliberately
+  /// never calls [OnboardingController.markCompleted] again: onboarding is
+  /// already completed by the time this is reachable at all (the entry
+  /// points that call this — Settings, Rules — only ever render once Home
+  /// itself is showing), so reopening and closing the tutorial manually
+  /// never touches [_onboardingController] or any other app data, and
+  /// popping always returns to whichever screen pushed it (Settings or
+  /// Rules), satisfying "return to the initiating screen when closed".
+  void _openTutorial(BuildContext context) {
+    if (_isNavigatingToTutorial) return;
+    _isNavigatingToTutorial = true;
+    _audioFeedback.playButtonTap();
+    unawaited(
+      Navigator.of(context)
+          .push(
+            MaterialPageRoute(
+              builder: (_) =>
+                  OnboardingScreen(onDone: () => Navigator.of(context).pop()),
+            ),
+          )
+          .whenComplete(() => _isNavigatingToTutorial = false),
     );
   }
 
@@ -916,24 +1020,36 @@ class _CowBullAppState extends State<CowBullApp> {
               _coinWallet,
               _streakController,
               _dailyChallengeController,
+              _onboardingController,
             ]),
-            builder: (context, _) => HomeScreen(
-              onStartGame: (difficulty) => _startGame(context, difficulty),
-              onOpenRules: () => _openRules(context),
-              onOpenSettings: () => _openSettings(context),
-              onOpenStatistics: () => _openStatistics(context),
-              onOpenDailyChallenge: () =>
-                  unawaited(_startDailyChallenge(context)),
-              coinBalance: _coinWallet.balance,
-              currentStreak: _streakController.state.currentStreak,
-              longestStreak: _streakController.state.longestStreak,
-              dailyChallengeStatus: _dailyChallengeCardStatus(),
-              dailyChallengeDateLabel: _formatDate(
-                _dailyChallengeController.today,
-              ),
-              onDifficultySelected: (_) =>
-                  _audioFeedback.onDifficultySelected(),
-            ),
+            builder: (context, _) => _onboardingController.completed
+                ? HomeScreen(
+                    onStartGame: (difficulty) =>
+                        _startGame(context, difficulty),
+                    onOpenRules: () => _openRules(context),
+                    onOpenSettings: () => _openSettings(context),
+                    onOpenStatistics: () => _openStatistics(context),
+                    onOpenDailyChallenge: () =>
+                        unawaited(_startDailyChallenge(context)),
+                    coinBalance: _coinWallet.balance,
+                    currentStreak: _streakController.state.currentStreak,
+                    longestStreak: _streakController.state.longestStreak,
+                    dailyChallengeStatus: _dailyChallengeCardStatus(),
+                    dailyChallengeDateLabel: _formatDate(
+                      _dailyChallengeController.today,
+                    ),
+                    onDifficultySelected: (_) =>
+                        _audioFeedback.onDifficultySelected(),
+                  )
+                // Shown only while onboarding has not yet been completed or
+                // skipped — the very first frame a fresh install (or an
+                // install without a reliable existing-install signal — see
+                // AppBootstrap.load) ever renders. Rendered here, in place
+                // of Home, rather than pushed via Navigator: there is
+                // nothing beneath it to leave on the stack, satisfying
+                // "finishing onboarding must not leave it beneath Home in
+                // the navigation stack".
+                : OnboardingScreen(onDone: _onboardingController.markCompleted),
           ),
         ),
       ),

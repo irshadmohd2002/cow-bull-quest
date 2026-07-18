@@ -14,6 +14,8 @@ void main() {
     ValueChanged<bool>? onMusicChanged,
     bool hapticsEnabled = true,
     ValueChanged<bool>? onHapticsChanged,
+    VoidCallback? onViewTutorial,
+    VoidCallback? onResetLocalData,
   }) {
     return MaterialApp(
       home: SettingsScreen(
@@ -26,6 +28,8 @@ void main() {
         onMusicChanged: onMusicChanged ?? (_) {},
         hapticsEnabled: hapticsEnabled,
         onHapticsChanged: onHapticsChanged ?? (_) {},
+        onViewTutorial: onViewTutorial ?? () {},
+        onResetLocalData: onResetLocalData,
       ),
     );
   }
@@ -157,6 +161,7 @@ void main() {
     testWidgets('does not invoke any callback while disabled', (tester) async {
       await tester.pumpWidget(buildSubject());
 
+      await tester.ensureVisible(find.text('Privacy Policy'));
       await tester.tap(find.text('Privacy Policy'));
       await tester.pumpAndSettle();
 
@@ -423,6 +428,94 @@ void main() {
         find.widgetWithText(SwitchListTile, 'Sound effects'),
         findsOneWidget,
       );
+    });
+  });
+
+  group('View Tutorial row', () {
+    testWidgets('is always shown, with a supporting description', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject());
+
+      expect(find.text('View Tutorial'), findsOneWidget);
+      expect(
+        find.text('Replaying it never changes your progress or settings.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('tapping it invokes onViewTutorial exactly once', (
+      tester,
+    ) async {
+      var callCount = 0;
+      await tester.pumpWidget(buildSubject(onViewTutorial: () => callCount++));
+
+      await tester.ensureVisible(find.text('View Tutorial'));
+      await tester.tap(find.text('View Tutorial'));
+      await tester.pumpAndSettle();
+
+      expect(callCount, 1);
+    });
+  });
+
+  group('Reset local data row', () {
+    testWidgets('is hidden when onResetLocalData is null', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      expect(find.text('Reset local data'), findsNothing);
+    });
+
+    testWidgets('appears when onResetLocalData is supplied', (tester) async {
+      await tester.pumpWidget(buildSubject(onResetLocalData: () {}));
+      expect(find.text('Reset local data'), findsOneWidget);
+    });
+
+    testWidgets('tapping it shows a confirmation dialog naming every '
+        'cleared data category', (tester) async {
+      await tester.pumpWidget(buildSubject(onResetLocalData: () {}));
+
+      await tester.ensureVisible(find.text('Reset local data'));
+      await tester.tap(find.text('Reset local data'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Reset local data?'), findsOneWidget);
+      expect(find.textContaining('coins'), findsWidgets);
+      expect(find.textContaining('statistics'), findsWidgets);
+      expect(find.textContaining('streaks'), findsWidgets);
+      expect(find.textContaining('Daily Challenge history'), findsWidgets);
+      expect(find.textContaining('tutorial completion'), findsWidgets);
+    });
+
+    testWidgets('cancelling the dialog does not invoke onResetLocalData', (
+      tester,
+    ) async {
+      var callCount = 0;
+      await tester.pumpWidget(
+        buildSubject(onResetLocalData: () => callCount++),
+      );
+
+      await tester.ensureVisible(find.text('Reset local data'));
+      await tester.tap(find.text('Reset local data'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(callCount, 0);
+    });
+
+    testWidgets('confirming the dialog invokes onResetLocalData exactly '
+        'once', (tester) async {
+      var callCount = 0;
+      await tester.pumpWidget(
+        buildSubject(onResetLocalData: () => callCount++),
+      );
+
+      await tester.ensureVisible(find.text('Reset local data'));
+      await tester.tap(find.text('Reset local data'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reset'));
+      await tester.pumpAndSettle();
+
+      expect(callCount, 1);
     });
   });
 }

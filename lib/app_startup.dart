@@ -155,6 +155,32 @@ class _AppStartupState extends State<AppStartup> {
     await _load();
   }
 
+  /// Clears every app-owned storage key via [AppBootstrap.resetLocalData]
+  /// and reloads a fresh [AppBootstrap], exactly like [_handleReset] above —
+  /// but invoked from Settings' own "Reset local data" action (see
+  /// `app.dart`/`SettingsScreen`) while the app is already fully running,
+  /// rather than from the startup failure screen. Settings owns showing its
+  /// own confirmation dialog before this is ever called.
+  ///
+  /// [_load] rebuilds [_state] as a new [_StartupReady] wrapping a brand-new
+  /// [AppBootstrap] instance — every controller inside it (settings, coin
+  /// wallet, streak, Daily Challenge, onboarding) is freshly loaded from the
+  /// now-cleared store, so each starts back at its own documented default.
+  /// [build] keys the resulting [CowBullApp] by that new instance (see
+  /// `build`'s own doc), which is what makes Flutter actually tear down and
+  /// recreate it — swapping [CowBullApp]'s constructor arguments alone would
+  /// leave its already-`late final` controllers (settings, coin wallet, etc.)
+  /// pointing at their old, pre-reset instances.
+  Future<void> _handleResetFromSettings() async {
+    try {
+      await AppBootstrap.resetLocalData(widget.resetStore);
+    } catch (_) {
+      // Non-fatal: _load() below still runs regardless, mirroring
+      // _handleReset's own swallow above.
+    }
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     return switch (_state) {
@@ -168,6 +194,15 @@ class _AppStartupState extends State<AppStartup> {
         onReset: (context) => unawaited(_handleReset(context)),
       ),
       _StartupReady(:final bootstrap) => CowBullApp(
+        // Keyed by the specific bootstrap instance so a Settings-triggered
+        // reset (see [_handleResetFromSettings]) — which produces a new
+        // AppBootstrap with fresh, default-valued controllers — forces
+        // Flutter to fully dispose the old CowBullApp element and mount a
+        // new one, rather than reusing the old element's already-resolved
+        // `late final` controllers via didUpdateWidget. Every other caller
+        // of AppStartup only ever reaches _StartupReady once per app
+        // process, so this key never churns outside of an explicit reset.
+        key: ValueKey(bootstrap),
         settings: bootstrap.settings,
         statisticsRepository: bootstrap.statisticsRepository,
         coinWallet: bootstrap.coinWallet,
@@ -175,7 +210,9 @@ class _AppStartupState extends State<AppStartup> {
         audioFeedback: bootstrap.audioFeedback,
         streakController: bootstrap.streakController,
         dailyChallengeController: bootstrap.dailyChallengeController,
+        onboardingController: bootstrap.onboardingController,
         clock: bootstrap.clock,
+        onResetLocalData: _handleResetFromSettings,
       ),
     };
   }

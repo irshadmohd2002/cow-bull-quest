@@ -16,7 +16,7 @@ String _difficultyLabel(DifficultyOption option) => switch (option) {
 
 String _outcomeLabel(GameOutcome outcome) => switch (outcome) {
   GameOutcome.won => 'Won',
-  GameOutcome.lost => 'Lost',
+  GameOutcome.lost => 'Not solved',
 };
 
 String _twoDigits(int value) => value.toString().padLeft(2, '0');

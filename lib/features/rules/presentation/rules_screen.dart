@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_spacing.dart';
+import '../../../widgets/bulls_cows_example.dart';
 
 /// Explains how Bulls & Cows is played.
 ///
@@ -9,7 +10,14 @@ import '../../../theme/app_spacing.dart';
 /// attempts (see Milestone 12), so that fact is stated directly as plain
 /// copy here rather than read from `GameConfig`.
 class RulesScreen extends StatelessWidget {
-  const RulesScreen({super.key});
+  const RulesScreen({super.key, required this.onViewTutorial});
+
+  /// Called when the player taps "View Tutorial" to (re)watch the
+  /// first-launch onboarding walkthrough. Reopening it this way never
+  /// resets or alters any other app data — see `OnboardingScreen`'s own
+  /// doc. This entry point exists alongside the one in Settings so the
+  /// tutorial is reachable from either natural "help" destination.
+  final VoidCallback onViewTutorial;
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +25,22 @@ class RulesScreen extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('How to Play')),
+      appBar: AppBar(
+        title: const Text('How to Play'),
+        actions: [
+          Semantics(
+            button: true,
+            label: 'View Tutorial',
+            child: ExcludeSemantics(
+              child: TextButton.icon(
+                onPressed: onViewTutorial,
+                icon: const Icon(Icons.school_outlined),
+                label: const Text('Tutorial'),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.screenPadding),
@@ -35,8 +58,8 @@ class RulesScreen extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.md),
               Text(
-                'You guess a secret English word. After each guess, you '
-                'are told how many letters you got right.',
+                'You guess a secret 4-letter English word. After each '
+                'guess, you are told how many letters you got right.',
                 style: textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -89,12 +112,14 @@ class RulesScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: AppSpacing.md),
+              const BullsCowsExample(),
               const SizedBox(height: AppSpacing.xl),
               _SectionHeading('Difficulty'),
               const SizedBox(height: AppSpacing.sm),
               Text(
                 'Difficulty only changes which vocabulary the secret word '
-                'is drawn from — every game uses a 4-letter secret word and '
+                'is drawn from. Every game uses a 4-letter secret word and '
                 'gives you 10 attempts to guess it, no matter which '
                 'difficulty you pick.',
                 style: textTheme.bodyMedium?.copyWith(
@@ -224,7 +249,7 @@ class RulesScreen extends StatelessWidget {
                         icon: Icons.event_available,
                         heading: 'First official Daily Challenge win',
                         explanation:
-                            '+10 coins, on top of the Medium win reward — '
+                            '+10 coins, on top of the Medium win reward, '
                             'once per calendar day, for your first attempt '
                             'only.',
                         iconColor: colorScheme.tertiary,
@@ -245,8 +270,8 @@ class RulesScreen extends StatelessWidget {
               _SectionHeading('Daily Streak'),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'Complete at least one game — normal or Daily Challenge, won '
-                'or lost — on a calendar day to keep your streak going. Only '
+                'Complete at least one game (normal or Daily Challenge, won '
+                'or lost) on a calendar day to keep your streak going. Only '
                 'one streak day can be earned per calendar date, and your '
                 'streak is tracked locally, on this device.',
                 style: textTheme.bodyMedium?.copyWith(
@@ -265,7 +290,7 @@ class RulesScreen extends StatelessWidget {
                         heading: 'Wins and losses both count',
                         explanation:
                             'A completed game earns the day\'s streak '
-                            'whether you win or lose — only an abandoned or '
+                            'whether you win or lose. Only an abandoned or '
                             'restarted game does not count.',
                         iconColor: colorScheme.tertiary,
                       ),
@@ -284,8 +309,8 @@ class RulesScreen extends StatelessWidget {
                         heading: 'Offline and device-based',
                         explanation:
                             'Your streak is computed entirely on this '
-                            'device, with no internet time or server check — '
-                            'changing the device clock can affect it.',
+                            'device, with no internet time or server check. '
+                            'Changing the device clock can affect it.',
                       ),
                     ],
                   ),
@@ -354,26 +379,26 @@ class RulesScreen extends StatelessWidget {
               _SectionHeading('Examples'),
               const SizedBox(height: AppSpacing.md),
               const _RuleExample(
-                secretWord: 'APPLE',
-                guessWord: 'AMPLE',
-                bulls: 4,
+                secretWord: 'LAMP',
+                guessWord: 'LAMB',
+                bulls: 3,
                 cows: 0,
                 explanation:
-                    'A, P, L, and E all match in position, so that is 4 '
-                    'bulls. The guess\'s M does not appear anywhere in '
-                    'APPLE, so there are 0 cows.',
+                    'L, A, and M all match in position, so that is 3 '
+                    "bulls. The guess's B does not appear anywhere in "
+                    'LAMP, so there are 0 cows.',
               ),
               const SizedBox(height: AppSpacing.md),
               const _RuleExample(
-                secretWord: 'SPEED',
-                guessWord: 'EERIE',
-                bulls: 0,
-                cows: 2,
+                secretWord: 'SEED',
+                guessWord: 'DEER',
+                bulls: 2,
+                cows: 1,
                 explanation:
-                    'No letter matches in position, so that is 0 bulls. '
-                    'SPEED contains exactly two Es; EERIE repeats E three '
-                    'times, but only 2 of those count as cows — never more '
-                    'than the letter actually appears in the secret word.',
+                    'Both Es match in position, so that is 2 bulls. The '
+                    "guess's D is in SEED but at a different position, so "
+                    "that is 1 cow. The guess's R does not appear anywhere "
+                    'in SEED, so it adds nothing.',
               ),
             ],
           ),
@@ -469,12 +494,14 @@ class _RuleExample extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bullWord = bulls == 1 ? 'bull' : 'bulls';
+    final cowWord = cows == 1 ? 'cow' : 'cows';
     return Semantics(
       excludeSemantics: true,
       container: true,
       label:
           'Example: secret word $secretWord, guess $guessWord. '
-          'Result: $bulls bulls, $cows cows. $explanation',
+          'Result: $bulls $bullWord, $cows $cowWord. $explanation',
       child: Card(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),

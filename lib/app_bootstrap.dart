@@ -10,6 +10,8 @@ import 'core/persistence/storage_keys.dart';
 import 'core/time/local_date_provider.dart';
 import 'features/daily_challenge/controllers/daily_challenge_controller.dart';
 import 'features/daily_challenge/data/local_daily_challenge_repository.dart';
+import 'features/onboarding/controllers/onboarding_controller.dart';
+import 'features/onboarding/data/local_onboarding_repository.dart';
 import 'features/statistics/data/local_statistics_repository.dart';
 import 'features/statistics/data/statistics_repository.dart';
 import 'features/streak/controllers/streak_controller.dart';
@@ -32,6 +34,7 @@ class AppBootstrap {
     required this.clock,
     required this.streakController,
     required this.dailyChallengeController,
+    required this.onboardingController,
   });
 
   /// Loads persisted preferences and constructs the shared [PreferencesStore]
@@ -50,10 +53,35 @@ class AppBootstrap {
   /// instance when starting a new Daily Challenge — so every "today" this
   /// app computes agrees. Overridable only so tests can inject a fixed/fake
   /// clock without touching the real device time.
+  ///
+  /// **Onboarding existing-install signal.** Whether [StorageKeys.coinBalance]
+  /// already has a stored value is read *before* any other startup step —
+  /// deliberately before [CoinWallet.load] runs, since that call itself
+  /// writes an initializing value the very first time it ever sees a missing
+  /// balance (see `CoinWallet.load`'s own doc). Reading it first captures a
+  /// true "has this device ever completed any earlier bootstrap" signal: a
+  /// device that ran any app version through at least Milestone 19 already
+  /// has a coin balance persisted, since [CoinWallet.load] always backfills
+  /// one; a genuinely fresh install does not, since nothing has written to
+  /// this store yet. [OnboardingController.load] uses this signal only to
+  /// resolve its own ambiguous "nothing stored yet" case — an installation
+  /// that already has a coin balance is never forced through onboarding just
+  /// because it predates Milestone 20, while a true fresh install (no coin
+  /// balance yet either) sees onboarding exactly once. This read never
+  /// throws in a way that blocks startup: a failure here is treated
+  /// identically to "no signal", the same conservative default a fresh
+  /// install would produce.
   static Future<AppBootstrap> load({
     LocalDateProvider clock = const SystemLocalDateProvider(),
   }) async {
     const store = SharedPreferencesStore();
+    bool hasExistingInstallSignal;
+    try {
+      hasExistingInstallSignal =
+          await store.getString(StorageKeys.coinBalance) != null;
+    } catch (_) {
+      hasExistingInstallSignal = false;
+    }
     final settings = await AppSettings.load(store);
     final statisticsRepository = LocalStatisticsRepository(store: store);
     final coinWallet = await CoinWallet.load(store);
@@ -71,6 +99,10 @@ class AppBootstrap {
       repository: LocalDailyChallengeRepository(store: store),
       clock: clock,
     );
+    final onboardingController = await OnboardingController.load(
+      repository: LocalOnboardingRepository(store: store),
+      treatAsCompletedIfMissing: hasExistingInstallSignal,
+    );
     return AppBootstrap(
       settings: settings,
       statisticsRepository: statisticsRepository,
@@ -80,6 +112,7 @@ class AppBootstrap {
       clock: clock,
       streakController: streakController,
       dailyChallengeController: dailyChallengeController,
+      onboardingController: onboardingController,
     );
   }
 
@@ -119,15 +152,29 @@ class AppBootstrap {
   /// persisted storage. Owned by [CowBullApp] for the app's lifetime.
   final DailyChallengeController dailyChallengeController;
 
+  /// Whether first-launch onboarding has been completed or skipped, already
+  /// resolved from persisted storage (falling back to the existing-install
+  /// signal described on [load] when nothing is stored yet). Owned by
+  /// [CowBullApp] for the app's lifetime.
+  final OnboardingController onboardingController;
+
   /// Deletes every app-owned local storage key — currently
   /// [StorageKeys.themePreference], [StorageKeys.statistics],
   /// [StorageKeys.coinBalance], [StorageKeys.totalCoinsEarned],
   /// [StorageKeys.totalCoinsSpent], [StorageKeys.soundEffectsEnabled],
   /// [StorageKeys.musicEnabled], [StorageKeys.hapticsEnabled],
-  /// [StorageKeys.streak], and [StorageKeys.dailyChallengeResults], and
-  /// nothing else — from [store]. Used by the startup failure screen's
-  /// "Reset local data" action so a corrupted or otherwise unrecoverable
-  /// local storage state can be cleared without reinstalling the app.
+  /// [StorageKeys.streak], [StorageKeys.dailyChallengeResults], and
+  /// [StorageKeys.onboardingCompleted], and nothing else — from [store].
+  /// Used by the startup failure screen's "Reset local data" action, and by
+  /// Settings' own "Reset local data" action (see `app.dart`), so a
+  /// corrupted or otherwise unrecoverable local storage state can be
+  /// cleared without reinstalling the app. Clearing
+  /// [StorageKeys.onboardingCompleted] here — alongside
+  /// [StorageKeys.coinBalance], the existing-install signal [load] itself
+  /// reads — is what makes an explicit full-data reset restore first-launch
+  /// onboarding behavior: the very next [load] sees neither a stored
+  /// onboarding flag nor a stored coin balance, exactly like a genuinely
+  /// fresh install.
   ///
   /// Removing a key that was never set is not an error (see
   /// [PreferencesStore.remove]), so this is safe to call even when nothing
@@ -144,5 +191,6 @@ class AppBootstrap {
     await store.remove(StorageKeys.hapticsEnabled);
     await store.remove(StorageKeys.streak);
     await store.remove(StorageKeys.dailyChallengeResults);
+    await store.remove(StorageKeys.onboardingCompleted);
   }
 }

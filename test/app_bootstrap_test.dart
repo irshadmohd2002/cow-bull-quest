@@ -1,6 +1,7 @@
 import 'package:cowbullgame/app_bootstrap.dart';
 import 'package:cowbullgame/app_settings.dart';
 import 'package:cowbullgame/coin_wallet.dart';
+import 'package:cowbullgame/core/persistence/shared_preferences_store.dart';
 import 'package:cowbullgame/core/persistence/storage_keys.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -132,6 +133,53 @@ void main() {
     );
   });
 
+  group('AppBootstrap.load — onboarding', () {
+    test('a genuinely fresh install (nothing stored at all) shows '
+        'onboarding', () async {
+      final bootstrap = await AppBootstrap.load();
+      expect(bootstrap.onboardingController.completed, isFalse);
+    });
+
+    test('an existing install (already has a coin balance, but no '
+        'onboarding flag) is treated as already completed — onboarding is '
+        'never forced on a player who already knows the app', () async {
+      SharedPreferences.setMockInitialValues({StorageKeys.coinBalance: '80'});
+      final bootstrap = await AppBootstrap.load();
+      expect(bootstrap.onboardingController.completed, isTrue);
+    });
+
+    test('an explicitly stored "not completed" flag is restored verbatim, '
+        'even on an install that also has a coin balance', () async {
+      SharedPreferences.setMockInitialValues({
+        StorageKeys.coinBalance: '80',
+        StorageKeys.onboardingCompleted: 'false',
+      });
+      final bootstrap = await AppBootstrap.load();
+      expect(bootstrap.onboardingController.completed, isFalse);
+    });
+
+    test(
+      'an explicitly stored "completed" flag is restored verbatim',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          StorageKeys.onboardingCompleted: 'true',
+        });
+        final bootstrap = await AppBootstrap.load();
+        expect(bootstrap.onboardingController.completed, isTrue);
+      },
+    );
+
+    test('a malformed stored onboarding value recovers safely, falling back '
+        'to the existing-install signal', () async {
+      SharedPreferences.setMockInitialValues({
+        StorageKeys.coinBalance: '80',
+        StorageKeys.onboardingCompleted: 'not-a-boolean',
+      });
+      final bootstrap = await AppBootstrap.load();
+      expect(bootstrap.onboardingController.completed, isTrue);
+    });
+  });
+
   group('AppBootstrap.resetLocalData', () {
     test('removes the theme preference, statistics, coin balance, coin '
         'totals, and audio feedback keys', () async {
@@ -180,6 +228,32 @@ void main() {
         store.values.containsKey(StorageKeys.dailyChallengeResults),
         isFalse,
       );
+    });
+
+    test('removes the onboarding-completed key, so a subsequent load shows '
+        'onboarding again', () async {
+      final store = FakePreferencesStore(
+        initialValues: {StorageKeys.onboardingCompleted: 'true'},
+      );
+
+      await AppBootstrap.resetLocalData(store);
+
+      expect(
+        store.values.containsKey(StorageKeys.onboardingCompleted),
+        isFalse,
+      );
+    });
+
+    test('after a full reset, the very next AppBootstrap.load shows '
+        'onboarding again — the coin-balance existing-install signal is '
+        'also cleared', () async {
+      SharedPreferences.setMockInitialValues({
+        StorageKeys.coinBalance: '80',
+        StorageKeys.onboardingCompleted: 'true',
+      });
+      await AppBootstrap.resetLocalData(const SharedPreferencesStore());
+      final bootstrap = await AppBootstrap.load();
+      expect(bootstrap.onboardingController.completed, isFalse);
     });
 
     test('leaves any other key untouched', () async {

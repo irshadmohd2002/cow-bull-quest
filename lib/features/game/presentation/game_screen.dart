@@ -10,6 +10,7 @@ import '../../../theme/app_motion.dart';
 import '../../../theme/app_spacing.dart';
 import '../../../theme/app_status_colors.dart';
 import '../../../widgets/coin_balance_badge.dart';
+import '../../../widgets/confirm_dialog.dart';
 import '../controllers/game_controller.dart';
 import '../controllers/game_controller_state.dart';
 import '../models/game_config.dart';
@@ -98,6 +99,7 @@ class GameScreen extends StatefulWidget {
     this.coinsEarnedFeedback,
     this.currentStreak,
     this.resultTextBuilder,
+    this.dailyChallengeReplayFeedback,
   });
 
   /// The controller for this game flow. Owned by this screen.
@@ -152,6 +154,17 @@ class GameScreen extends StatefulWidget {
   /// [ResultTextBuilder]'s own doc for why this exists.
   final ResultTextBuilder? resultTextBuilder;
 
+  /// Set exactly once, synchronously, by the app-level composition root at
+  /// the same moment as [streakFeedback] — but only for a Daily Challenge
+  /// session — to whether this specific completion was a practice replay
+  /// (`true`) or today's official attempt (`false`). `null` throughout for
+  /// every normal (non-Daily-Challenge) game, which never sets this at all.
+  /// When the completed view renders `true`, it shows an explicit "replay —
+  /// no additional coins" notice, so a Daily Challenge replay is never
+  /// ambiguous with an official loss (both otherwise show no coin-reward
+  /// card, but only a replay should say so).
+  final ValueNotifier<bool?>? dailyChallengeReplayFeedback;
+
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
@@ -180,6 +193,21 @@ class _GameScreenState extends State<GameScreen> {
   /// overlapping share sheets, the same pattern [_hintBusy] uses for hints.
   bool _sharing = false;
 
+  /// Set the instant a leave/restart confirmation dialog begins and cleared
+  /// once it settles. Guards against a rapid double-tap on the Restart
+  /// action, or a rapid double back-gesture, opening two overlapping
+  /// confirmation dialogs — the same pattern [_hintBusy] uses for hints. A
+  /// single flag safely covers both dialogs since a player can only be
+  /// looking at one of them at a time.
+  bool _confirmationBusy = false;
+
+  /// Set the instant Return to Home is tapped from the completed view.
+  /// Guards against a rapid double-tap firing two overlapping
+  /// [Navigator.pop] calls — which, unlike a double-tap on Restart (already
+  /// safely debounced by [GameController]'s own generation counter), could
+  /// otherwise pop past this screen and into Home itself.
+  bool _leaving = false;
+
   @override
   void initState() {
     super.initState();
@@ -195,6 +223,8 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _handleReturnHome() {
+    if (_leaving) return;
+    _leaving = true;
     widget.onButtonTap?.call();
     Navigator.of(context).pop();
   }
@@ -205,6 +235,67 @@ class _GameScreenState extends State<GameScreen> {
     widget.onButtonTap?.call();
     _guessTextController.clear();
     unawaited(widget.controller.restart());
+  }
+
+  /// Whether at least one guess has been accepted in the current game — the
+  /// point past which restarting or leaving would actually lose progress.
+  /// `false` whenever no game is active at all (idle, loading, completed —
+  /// completion has its own "no confirmation needed" rule handled
+  /// separately — or a failed startup).
+  bool get _hasAcceptedProgress {
+    final state = widget.controller.state;
+    return state is GameActive && state.view.attemptsUsed > 0;
+  }
+
+  /// Handles a tap on the AppBar's Restart action during active gameplay.
+  ///
+  /// Restarts immediately, with no dialog, if no guess has been accepted
+  /// yet (nothing to lose) — otherwise shows "Restart game?" first and only
+  /// restarts if confirmed. [_confirmationBusy] is set synchronously, before
+  /// the `await showConfirmDialog`, so a rapid double-tap cannot stack two
+  /// overlapping confirmation dialogs.
+  Future<void> _handleRestartRequest() async {
+    if (_confirmationBusy || widget.controller.state is! GameActive) return;
+    if (!_hasAcceptedProgress) {
+      _handleRestart();
+      return;
+    }
+    _confirmationBusy = true;
+    try {
+      final confirmed = await showConfirmDialog(
+        context,
+        title: 'Restart game?',
+        body: 'Your current guesses will be cleared.',
+        confirmLabel: 'Restart',
+      );
+      if (confirmed) _handleRestart();
+    } finally {
+      if (mounted) _confirmationBusy = false;
+    }
+  }
+
+  /// Handles an attempt to leave this screen — the system back gesture, or
+  /// the AppBar's implied back button — while [_hasAcceptedProgress] is
+  /// `true` (see [PopScope.canPop] in [build], which is what routes both of
+  /// those here instead of popping immediately). Shows "Leave this game?"
+  /// and only actually leaves if confirmed; [_confirmationBusy] guards
+  /// against a rapid double back-gesture stacking two dialogs, exactly like
+  /// [_handleRestartRequest].
+  Future<void> _handleLeaveAttempt() async {
+    if (_confirmationBusy) return;
+    _confirmationBusy = true;
+    try {
+      final confirmed = await showConfirmDialog(
+        context,
+        title: 'Leave this game?',
+        body: 'Your current guesses will be lost.',
+        confirmLabel: 'Leave',
+        cancelLabel: 'Keep playing',
+      );
+      if (confirmed && mounted) Navigator.of(context).pop();
+    } finally {
+      if (mounted) _confirmationBusy = false;
+    }
   }
 
   void _handleSubmit(String rawText) {
@@ -339,24 +430,49 @@ class _GameScreenState extends State<GameScreen> {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: widget.controller,
-      builder: (context, _) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Cow Bull Quest'),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: AppSpacing.md),
-              child: Center(
-                child: CoinBalanceBadge(
-                  balance: widget.controller.coinWallet.balance,
+      builder: (context, _) => PopScope(
+        // Only intercepts the system back gesture / the AppBar's implied
+        // back button while there is genuine progress to lose — before any
+        // guess is accepted, or once the game is complete, leaving is never
+        // gated behind a confirmation (see the milestone's own "no
+        // confirmation before the first accepted guess" / "no confirmation
+        // after completion" rules).
+        canPop: !_hasAcceptedProgress,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          unawaited(_handleLeaveAttempt());
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Cow Bull Quest'),
+            actions: [
+              if (widget.controller.state is GameActive)
+                Semantics(
+                  button: true,
+                  label: 'Restart game',
+                  child: ExcludeSemantics(
+                    child: IconButton(
+                      icon: const Icon(Icons.replay),
+                      tooltip: 'Restart game',
+                      onPressed: () => unawaited(_handleRestartRequest()),
+                    ),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.md),
+                child: Center(
+                  child: CoinBalanceBadge(
+                    balance: widget.controller.coinWallet.balance,
+                  ),
                 ),
               ),
+            ],
+          ),
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: _buildBody(widget.controller.state),
             ),
-          ],
-        ),
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: _buildBody(widget.controller.state),
           ),
         ),
       ),
@@ -387,6 +503,7 @@ class _GameScreenState extends State<GameScreen> {
         sharing: _sharing,
         streakFeedback: widget.streakFeedback?.value,
         coinsEarned: widget.coinsEarnedFeedback?.value,
+        isDailyChallengeReplay: widget.dailyChallengeReplayFeedback?.value,
         difficulty: widget.config.difficulty,
         onRestart: _handleRestart,
         onReturnHome: _handleReturnHome,
@@ -605,6 +722,7 @@ class _CompletedGameView extends StatelessWidget {
     required this.sharing,
     this.streakFeedback,
     this.coinsEarned,
+    this.isDailyChallengeReplay,
     required this.difficulty,
     required this.onRestart,
     required this.onReturnHome,
@@ -629,6 +747,10 @@ class _CompletedGameView extends StatelessWidget {
   /// no coin-reward card at all. See [GameScreen.coinsEarnedFeedback].
   final CoinRewardBreakdown? coinsEarned;
 
+  /// Whether this completion was a Daily Challenge practice replay, `null`
+  /// for every normal game. See [GameScreen.dailyChallengeReplayFeedback].
+  final bool? isDailyChallengeReplay;
+
   /// The difficulty this game was played at, labeling
   /// [coinsEarned]'s base-win-reward line (e.g. "Medium win").
   final GameDifficulty difficulty;
@@ -641,7 +763,7 @@ class _CompletedGameView extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = state.session;
     final won = session.status == GameStatus.won;
-    final outcomeText = won ? 'You won!' : 'You lost';
+    final outcomeText = won ? 'You won!' : 'Not solved';
     final colorScheme = Theme.of(context).colorScheme;
     final statusColors = Theme.of(context).extension<AppStatusColors>();
     final outcomeColor = won
@@ -734,6 +856,10 @@ class _CompletedGameView extends StatelessWidget {
                   breakdown: coinsEarned!,
                   difficulty: difficulty,
                 ),
+              ],
+              if (isDailyChallengeReplay ?? false) ...[
+                const SizedBox(height: AppSpacing.md),
+                const _DailyChallengeReplayNotice(),
               ],
               if (streakFeedback != null) ...[
                 const SizedBox(height: AppSpacing.md),
@@ -890,6 +1016,54 @@ class _CoinRewardBreakdownCard extends StatelessWidget {
                   ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// An explicit "this replay earned no additional coins" notice, shown only
+/// for a Daily Challenge completion that was not today's official (first)
+/// attempt — see [GameScreen.dailyChallengeReplayFeedback]'s own doc for why
+/// this can't simply be inferred from [CoinRewardBreakdown] being absent (a
+/// loss, official or not, is also absent a coin-reward card).
+class _DailyChallengeReplayNotice extends StatelessWidget {
+  const _DailyChallengeReplayNotice();
+
+  static const String _text =
+      'Daily Challenge replay: this attempt does not earn additional '
+      'coins. Only your first attempt each day is official.';
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Semantics(
+      label: _text,
+      child: ExcludeSemantics(
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: colorScheme.outlineVariant),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.replay, size: 20, color: colorScheme.onSurfaceVariant),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  _text,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
           ),
         ),
       ),

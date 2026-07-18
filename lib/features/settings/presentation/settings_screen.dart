@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app_settings.dart';
 import '../../../theme/app_spacing.dart';
+import '../../../widgets/confirm_dialog.dart';
 
 /// Lets the player choose the app's theme preference and open the privacy
 /// policy.
@@ -30,6 +31,8 @@ class SettingsScreen extends StatelessWidget {
     required this.onMusicChanged,
     required this.hapticsEnabled,
     required this.onHapticsChanged,
+    required this.onViewTutorial,
+    this.onResetLocalData,
   });
 
   /// The currently-selected theme preference.
@@ -68,6 +71,18 @@ class SettingsScreen extends StatelessWidget {
   /// The composition root passes `null` while the configured privacy-policy
   /// URL isn't release-ready yet (see `core/privacy_policy.dart`).
   final VoidCallback? onOpenPrivacyPolicy;
+
+  /// Called when the player taps "View Tutorial" to manually replay
+  /// first-launch onboarding. Reopening it this way never resets or alters
+  /// any other app data — see `OnboardingScreen`'s own doc.
+  final VoidCallback onViewTutorial;
+
+  /// Called after the player confirms Settings' own "Reset local data"
+  /// dialog, or `null` to hide that row entirely — the same "`null` gates
+  /// visibility" pattern [onOpenPrivacyPolicy] uses. This screen shows its
+  /// own confirmation dialog itself (naming every category of data it
+  /// clears) before ever invoking this.
+  final VoidCallback? onResetLocalData;
 
   static const Map<AppThemePreference, String> _labels = {
     AppThemePreference.system: 'Follow system',
@@ -219,6 +234,40 @@ class SettingsScreen extends StatelessWidget {
                 const SizedBox(height: AppSpacing.lg),
                 Semantics(
                   header: true,
+                  child: Text('Help', style: textTheme.titleMedium),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Replay the introduction to how Cow Bull Quest works.',
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: Semantics(
+                    button: true,
+                    label:
+                        'View Tutorial. Replay the first-launch '
+                        'introduction. This does not change your coins, '
+                        'statistics, streaks, or other settings.',
+                    child: ExcludeSemantics(
+                      child: ListTile(
+                        leading: const Icon(Icons.school_outlined),
+                        title: const Text('View Tutorial'),
+                        subtitle: const Text(
+                          'Replaying it never changes your progress or '
+                          'settings.',
+                        ),
+                        onTap: onViewTutorial,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Semantics(
+                  header: true,
                   child: Text('About', style: textTheme.titleMedium),
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -228,6 +277,51 @@ class SettingsScreen extends StatelessWidget {
                     onOpenPrivacyPolicy: onOpenPrivacyPolicy,
                   ),
                 ),
+                if (onResetLocalData != null) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  Semantics(
+                    header: true,
+                    child: Text('Data', style: textTheme.titleMedium),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Permanently erase everything saved on this device.',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: Semantics(
+                      button: true,
+                      label:
+                          'Reset local data. Permanently clears your coins, '
+                          'statistics, streaks, and Daily Challenge history '
+                          'on this device.',
+                      child: ExcludeSemantics(
+                        child: ListTile(
+                          leading: Icon(
+                            Icons.delete_forever_outlined,
+                            color: colorScheme.error,
+                          ),
+                          title: Text(
+                            'Reset local data',
+                            style: TextStyle(color: colorScheme.error),
+                          ),
+                          subtitle: const Text(
+                            'Clears coins, statistics, streaks, and Daily '
+                            'Challenge history on this device.',
+                          ),
+                          onTap: () => _confirmResetLocalData(
+                            context,
+                            onResetLocalData!,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -235,6 +329,28 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Shows Settings' "Reset local data" confirmation — explicitly naming every
+/// category of data it clears, including onboarding/tutorial completion —
+/// and, only if confirmed, calls [onConfirmed]. Mirrors the same
+/// show-dialog-then-call-back shape `StatisticsScreen`'s own
+/// `_confirmClear` uses for its destructive action.
+Future<void> _confirmResetLocalData(
+  BuildContext context,
+  VoidCallback onConfirmed,
+) async {
+  final confirmed = await showConfirmDialog(
+    context,
+    title: 'Reset local data?',
+    body:
+        'This permanently clears your coins, statistics, streaks, Daily '
+        'Challenge history, tutorial completion, and app preferences '
+        '(theme, sound, music, and haptics) on this device. This cannot be '
+        'undone.',
+    confirmLabel: 'Reset',
+  );
+  if (confirmed) onConfirmed();
 }
 
 /// The "Privacy Policy" row: enabled and reporting taps through

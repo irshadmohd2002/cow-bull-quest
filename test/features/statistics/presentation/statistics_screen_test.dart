@@ -139,7 +139,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Won'), findsOneWidget);
-      expect(find.textContaining('Lost'), findsOneWidget);
+      expect(find.textContaining('Not solved'), findsOneWidget);
     });
 
     testWidgets('never shows a secret word', (tester) async {
