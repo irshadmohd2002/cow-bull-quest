@@ -15,7 +15,7 @@ import '../../widgets/share_cards/branded_share_card_frame.dart';
 abstract class ShareCardRenderer {
   /// Renders [card] — expected to be a [BrandedShareCardFrame]-based widget
   /// laid out at [BrandedShareCardFrame.logicalSize] square — to PNG bytes at
-  /// [pixelRatio] (3.0 by default, producing a 1080x1080 image from a 360
+  /// [pixelRatio] (2.0 by default, producing a 720x720 image from a 360
   /// logical-pixel card). [context] is used only to locate the app's root
   /// [Overlay]; nothing under it is read.
   ///
@@ -44,7 +44,7 @@ class OffscreenShareCardRenderer implements ShareCardRenderer {
   Future<Uint8List> render({
     required BuildContext context,
     required Widget card,
-    double pixelRatio = 3.0,
+    double pixelRatio = 2.0,
   }) async {
     // No `await` between resolving [context]-dependent state and using it —
     // this class is not a State and has no `mounted` to guard re-reading

@@ -94,7 +94,7 @@ class GameScreen extends StatefulWidget {
   final GameConfig config;
 
   /// Called for this screen's own important navigation actions (Restart,
-  /// Return Home, Share Win/Challenge) so the caller can play a
+  /// Home, Share Win/Challenge) so the caller can play a
   /// button-activation sound, or `null` to play none. Deliberately generic —
   /// this screen never imports anything audio/haptic-related itself; the
   /// app-level composition root supplies the real behavior (see `app.dart`).
@@ -199,7 +199,7 @@ class _GameScreenState extends State<GameScreen> {
   /// looking at one of them at a time.
   bool _confirmationBusy = false;
 
-  /// Set the instant Return to Home is tapped from the completed view.
+  /// Set the instant Home is tapped from the completed view.
   /// Guards against a rapid double-tap firing two overlapping
   /// [Navigator.pop] calls — which, unlike a double-tap on Restart (already
   /// safely debounced by [GameController]'s own generation counter), could
@@ -889,51 +889,145 @@ class _CompletedGameView extends StatelessWidget {
               const SizedBox(height: AppSpacing.lg),
               GuessHistory(guesses: session.guesses, shrinkWrap: true),
               const SizedBox(height: AppSpacing.lg),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: onReturnHome,
-                      icon: const Icon(Icons.home),
-                      label: const Text('Return to Home'),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: onRestart,
-                      icon: const Icon(Icons.replay),
-                      label: const Text('Restart'),
-                    ),
-                  ),
-                ],
+              _ResultActions(
+                isDailyChallenge: isDailyChallenge,
+                sharingBusy: sharingBusy,
+                onRestart: onRestart,
+                onReturnHome: onReturnHome,
+                onShare: onShare,
               ),
-              if (onShare != null) ...[
-                const SizedBox(height: AppSpacing.md),
-                Semantics(
-                  button: true,
-                  label: isDailyChallenge ? 'Share challenge' : 'Share win',
-                  child: ExcludeSemantics(
-                    child: OutlinedButton.icon(
-                      onPressed: sharingBusy ? null : onShare,
-                      icon: sharingBusy
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.image),
-                      label: Text(
-                        isDailyChallenge ? 'Share Challenge' : 'Share Win',
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The completed-view action buttons: a single visually-dominant primary
+/// action ("Play Again"/"Replay") followed by secondary actions (Share
+/// Win/Challenge, Home). The secondary actions share a row when there's
+/// room; otherwise they stack, so neither label ever wraps or overflows at
+/// a narrow width or a large text-scale factor.
+class _ResultActions extends StatelessWidget {
+  const _ResultActions({
+    required this.isDailyChallenge,
+    required this.sharingBusy,
+    required this.onRestart,
+    required this.onReturnHome,
+    required this.onShare,
+  });
+
+  final bool isDailyChallenge;
+  final bool sharingBusy;
+  final VoidCallback onRestart;
+  final VoidCallback onReturnHome;
+  final VoidCallback? onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryLabel = isDailyChallenge ? 'Replay' : 'Play Again';
+    final primarySemanticsLabel = isDailyChallenge ? 'Replay' : 'Play again';
+    final primaryButton = Semantics(
+      button: true,
+      label: primarySemanticsLabel,
+      child: ExcludeSemantics(
+        child: FilledButton.icon(
+          onPressed: onRestart,
+          icon: const Icon(Icons.replay),
+          label: Text(
+            primaryLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+          ),
+        ),
+      ),
+    );
+
+    final homeButton = Semantics(
+      button: true,
+      label: 'Home',
+      child: ExcludeSemantics(
+        child: OutlinedButton.icon(
+          onPressed: onReturnHome,
+          icon: const Icon(Icons.home_rounded),
+          label: const Text(
+            'Home',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+          ),
+        ),
+      ),
+    );
+
+    final shareHandler = onShare;
+    final shareButton = shareHandler == null
+        ? null
+        : Semantics(
+            button: true,
+            label: isDailyChallenge ? 'Share challenge' : 'Share win',
+            child: ExcludeSemantics(
+              child: OutlinedButton.icon(
+                onPressed: sharingBusy ? null : shareHandler,
+                icon: sharingBusy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.image),
+                label: Text(
+                  isDailyChallenge ? 'Share Challenge' : 'Share Win',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                ),
+              ),
+            ),
+          );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(width: double.infinity, child: primaryButton),
+        const SizedBox(height: AppSpacing.md),
+        if (shareButton == null)
+          SizedBox(width: double.infinity, child: homeButton)
+        else
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // Combines the available width with the active text-scale
+              // factor — rather than a bare width breakpoint — so a
+              // moderately-narrow phone at default text size still gets a
+              // single row, while a wide viewport at a large accessibility
+              // text scale (where each label needs much more horizontal
+              // room) still stacks instead of compressing or wrapping.
+              final textScale = MediaQuery.textScalerOf(context).scale(1);
+              final stack = constraints.maxWidth < 340 || textScale > 1.3;
+
+              if (stack) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    shareButton,
+                    const SizedBox(height: AppSpacing.sm),
+                    homeButton,
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: shareButton),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(child: homeButton),
+                ],
+              );
+            },
+          ),
+      ],
     );
   }
 }
@@ -1196,10 +1290,16 @@ class _StartupFailureView extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              OutlinedButton.icon(
-                onPressed: onReturnHome,
-                icon: const Icon(Icons.home),
-                label: const Text('Return to Home'),
+              Semantics(
+                button: true,
+                label: 'Home',
+                child: ExcludeSemantics(
+                  child: OutlinedButton.icon(
+                    onPressed: onReturnHome,
+                    icon: const Icon(Icons.home_rounded),
+                    label: const Text('Home'),
+                  ),
+                ),
               ),
               const SizedBox(width: AppSpacing.md),
               FilledButton.icon(

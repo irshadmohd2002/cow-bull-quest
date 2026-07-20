@@ -36,7 +36,7 @@ import 'package:flutter_test/flutter_test.dart';
 Future<Uint8List> _capturePng(
   WidgetTester tester,
   GlobalKey key, {
-  double pixelRatio = 3.0,
+  double pixelRatio = 2.0,
 }) async {
   final bytes = await tester.runAsync(() async {
     final boundary =
@@ -93,14 +93,14 @@ void main() {
       ]);
     });
 
-    testWidgets('produces a 1080x1080 image (360 logical @ pixelRatio 3.0)', (
+    testWidgets('produces a 720x720 image (360 logical @ pixelRatio 2.0)', (
       tester,
     ) async {
       final key = await pumpCard(
         tester,
         StreakShareCard(data: StreakShareData(currentStreak: 1)),
       );
-      final bytes = await _capturePng(tester, key);
+      final bytes = await _capturePng(tester, key, pixelRatio: 2.0);
 
       final decoded = await tester.runAsync(() async {
         final codec = await ui.instantiateImageCodec(bytes);
@@ -111,7 +111,7 @@ void main() {
         return size;
       });
 
-      expect(decoded, (1080, 1080));
+      expect(decoded, (720, 720));
     });
 
     testWidgets('repeated rendering with the same input is stable', (
@@ -138,7 +138,7 @@ void main() {
       await tester.runAsync(() async {
         final boundary =
             key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-        final image = await boundary.toImage(pixelRatio: 3.0);
+        final image = await boundary.toImage(pixelRatio: 2.0);
         image.dispose();
       });
 

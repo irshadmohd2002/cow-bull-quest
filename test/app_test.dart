@@ -608,8 +608,8 @@ void main() {
       await tester.pumpAndSettle();
       await enterAndSubmit(tester, 'lace');
 
-      await tester.ensureVisible(find.text('Return to Home'));
-      await tester.tap(find.text('Return to Home'));
+      await tester.ensureVisible(find.text('Home'));
+      await tester.tap(find.text('Home'));
       await tester.pumpAndSettle();
 
       await tester.ensureVisible(find.text('Statistics'));
@@ -639,7 +639,7 @@ void main() {
         await enterAndSubmit(tester, 'lace');
         expect(statisticsRepository.recordedGames, hasLength(1));
 
-        await tester.tap(find.text('Restart'));
+        await tester.tap(find.text('Play Again'));
         await tester.pumpAndSettle();
         await enterAndSubmit(tester, 'lace');
 
@@ -670,8 +670,8 @@ void main() {
       await enterAndSubmit(tester, 'lace');
       expect(statisticsRepository.recordedGames, hasLength(1));
 
-      await tester.ensureVisible(find.text('Return to Home'));
-      await tester.tap(find.text('Return to Home'));
+      await tester.ensureVisible(find.text('Home'));
+      await tester.tap(find.text('Home'));
       await tester.pumpAndSettle();
 
       expect(statisticsRepository.recordedGames, hasLength(1));
@@ -909,7 +909,7 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('You won!'), findsOneWidget);
-      await tester.tap(find.text('Restart'));
+      await tester.tap(find.text('Play Again'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Cow Bull Quest'), findsOneWidget);
     });
@@ -1242,8 +1242,8 @@ void main() {
 
       expect(find.textContaining('Streak started: 1 day'), findsOneWidget);
 
-      await tester.ensureVisible(find.text('Return to Home'));
-      await tester.tap(find.text('Return to Home'));
+      await tester.ensureVisible(find.text('Home'));
+      await tester.tap(find.text('Home'));
       await tester.pumpAndSettle();
 
       expect(find.text('1-day streak'), findsOneWidget);
@@ -1268,7 +1268,7 @@ void main() {
         await enterAndSubmit(tester, 'lace');
         expect(find.textContaining('Streak started: 1 day'), findsOneWidget);
 
-        await tester.tap(find.text('Restart'));
+        await tester.tap(find.text('Play Again'));
         await tester.pumpAndSettle();
         await enterAndSubmit(tester, 'lace');
 
@@ -1345,8 +1345,8 @@ void main() {
         expect(find.text('You won!'), findsOneWidget);
         expect(find.textContaining('Streak started: 1 day'), findsOneWidget);
 
-        await tester.ensureVisible(find.text('Return to Home'));
-        await tester.tap(find.text('Return to Home'));
+        await tester.ensureVisible(find.text('Home'));
+        await tester.tap(find.text('Home'));
         await tester.pumpAndSettle();
 
         expect(find.text('Completed · Won'), findsOneWidget);
@@ -1377,8 +1377,8 @@ void main() {
         await tester.pumpAndSettle();
         await enterAndSubmit(tester, 'lace');
         expect(find.textContaining('Streak started: 1 day'), findsOneWidget);
-        await tester.ensureVisible(find.text('Return to Home'));
-        await tester.tap(find.text('Return to Home'));
+        await tester.ensureVisible(find.text('Home'));
+        await tester.tap(find.text('Home'));
         await tester.pumpAndSettle();
 
         // Daily Challenge second, same day: must not extend the streak
@@ -1480,8 +1480,8 @@ void main() {
         // A practice replay wins in fewer attempts (immediately), but
         // sharing must still reflect the official first completion above,
         // not this replay.
-        await tester.ensureVisible(find.text('Restart'));
-        await tester.tap(find.text('Restart'));
+        await tester.ensureVisible(find.text('Replay'));
+        await tester.tap(find.text('Replay'));
         await tester.pumpAndSettle();
         await enterAndSubmit(tester, 'lace');
 
@@ -1691,7 +1691,7 @@ void main() {
         await enterAndSubmit(tester, 'lace');
         expect(find.text('115'), findsOneWidget);
 
-        await tester.tap(find.text('Restart'));
+        await tester.tap(find.text('Play Again'));
         await tester.pumpAndSettle();
         await enterAndSubmit(tester, 'lace');
 
@@ -1713,8 +1713,8 @@ void main() {
       await enterAndSubmit(tester, 'lace');
       expect(find.text('115'), findsOneWidget);
 
-      await tester.ensureVisible(find.text('Return to Home'));
-      await tester.tap(find.text('Return to Home'));
+      await tester.ensureVisible(find.text('Home'));
+      await tester.tap(find.text('Home'));
       await tester.pumpAndSettle();
 
       expect(find.text('115'), findsOneWidget);
@@ -1775,8 +1775,8 @@ void main() {
       await enterAndSubmit(tester, 'lace');
       expect(find.text('130'), findsOneWidget);
 
-      await tester.ensureVisible(find.text('Restart'));
-      await tester.tap(find.text('Restart'));
+      await tester.ensureVisible(find.text('Replay'));
+      await tester.tap(find.text('Replay'));
       await tester.pumpAndSettle();
       await enterAndSubmit(tester, 'lace');
 
@@ -1811,8 +1811,8 @@ void main() {
       // Easy win with a hint used: base 10, no no-hint bonus.
       // Balance: 100 - 20 (hint) + 10 (reward) = 90.
 
-      await tester.ensureVisible(find.text('Return to Home'));
-      await tester.tap(find.text('Return to Home'));
+      await tester.ensureVisible(find.text('Home'));
+      await tester.tap(find.text('Home'));
       await tester.pumpAndSettle();
 
       await tester.ensureVisible(find.text('Statistics'));

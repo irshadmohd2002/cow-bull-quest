@@ -12,8 +12,8 @@ import '../../theme/share_card_palette.dart';
 /// pixel-identical regardless of the device's screen size, text-scale
 /// factor, or active Light/Dark app theme (every color here comes from
 /// [ShareCardPalette], never `Theme.of(context)`). [ShareCardRenderer]
-/// captures exactly this logical size at `pixelRatio: 3.0`, producing a
-/// 1080x1080 PNG.
+/// captures exactly this logical size at `pixelRatio: 2.0`, producing a
+/// 720x720 PNG.
 class BrandedShareCardFrame extends StatelessWidget {
   const BrandedShareCardFrame({
     super.key,

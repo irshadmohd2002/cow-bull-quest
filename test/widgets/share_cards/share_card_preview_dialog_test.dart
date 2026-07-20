@@ -130,6 +130,9 @@ void main() {
     expect(shared, 1);
     // The sheet closes after a successful share.
     expect(find.byType(Image), findsNothing);
+    // Share reuses the bytes already rendered for the preview rather than
+    // triggering a second render.
+    expect(renderer.renderedCards, hasLength(1));
   });
 
   testWidgets('rapid repeated taps on Share produce only one share call', (

@@ -195,7 +195,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Retry'), findsOneWidget);
-    expect(find.text('Return to Home'), findsOneWidget);
+    expect(find.text('Home'), findsOneWidget);
     // No raw exception internals leak to the user.
     expect(find.textContaining('StateError'), findsNothing);
   });
@@ -348,8 +348,8 @@ void main() {
 
     expect(find.text('You won!'), findsOneWidget);
     expect(find.textContaining('LACE'), findsWidgets);
-    expect(find.text('Restart'), findsOneWidget);
-    expect(find.text('Return to Home'), findsOneWidget);
+    expect(find.text('Play Again'), findsOneWidget);
+    expect(find.text('Home'), findsOneWidget);
   });
 
   testWidgets('a losing final guess shows the loss state and secret word', (
@@ -396,7 +396,7 @@ void main() {
     await enterAndSubmit(tester, 'lace');
     expect(find.text('You won!'), findsOneWidget);
 
-    await tester.tap(find.text('Restart'));
+    await tester.tap(find.text('Play Again'));
     await tester.pumpAndSettle();
 
     expect(find.byType(TextField), findsOneWidget);
@@ -432,7 +432,7 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
 
     await enterAndSubmit(tester, 'lace');
-    await tester.tap(find.text('Return to Home'));
+    await tester.tap(find.text('Home'));
     await tester.pumpAndSettle();
 
     expect(find.text('Go to game'), findsOneWidget);
@@ -450,7 +450,7 @@ void main() {
     await tester.pumpAndSettle();
     await enterAndSubmit(tester, 'lace');
 
-    await tester.tap(find.text('Restart'));
+    await tester.tap(find.text('Play Again'));
     await tester.pumpAndSettle();
 
     expect(callCount, 1);
@@ -487,7 +487,7 @@ void main() {
     await tester.tap(find.text('Go to game'));
     await tester.pumpAndSettle();
     await enterAndSubmit(tester, 'lace');
-    await tester.tap(find.text('Return to Home'));
+    await tester.tap(find.text('Home'));
     await tester.pumpAndSettle();
 
     expect(callCount, 1);
@@ -501,7 +501,7 @@ void main() {
     await tester.pumpAndSettle();
     await enterAndSubmit(tester, 'lace');
 
-    await tester.tap(find.text('Restart'));
+    await tester.tap(find.text('Play Again'));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
@@ -693,7 +693,7 @@ void main() {
     await enterAndSubmit(tester, 'lace');
     expect(find.text('You won!'), findsOneWidget);
 
-    await tester.tap(find.text('Restart'));
+    await tester.tap(find.text('Play Again'));
     await tester.pumpAndSettle();
 
     final field = tester.widget<TextField>(find.byType(TextField));
@@ -1231,7 +1231,7 @@ void main() {
       await enterAndSubmit(tester, 'lace');
       expect(find.text('Hints used: 1'), findsOneWidget);
 
-      await tester.tap(find.text('Restart'));
+      await tester.tap(find.text('Play Again'));
       await tester.pumpAndSettle();
       await enterAndSubmit(tester, 'lace');
 
@@ -1303,9 +1303,9 @@ void main() {
 
       expect(find.text('You won!'), findsOneWidget);
       expect(find.text('Share Win'), findsOneWidget);
-      // Restart/Return Home remain alongside the new Share Win action.
-      expect(find.text('Restart'), findsOneWidget);
-      expect(find.text('Return to Home'), findsOneWidget);
+      // Play Again/Home remain alongside the new Share Win action.
+      expect(find.text('Play Again'), findsOneWidget);
+      expect(find.text('Home'), findsOneWidget);
     });
 
     testWidgets('no share action is shown after a loss', (tester) async {
@@ -1324,6 +1324,9 @@ void main() {
       expect(find.text('Not solved'), findsOneWidget);
       expect(find.text('Share Win'), findsNothing);
       expect(find.text('Share Challenge'), findsNothing);
+      // A loss still shows the primary and Home actions, just no share.
+      expect(find.text('Play Again'), findsOneWidget);
+      expect(find.text('Home'), findsOneWidget);
     });
 
     testWidgets(
@@ -1441,8 +1444,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('You won!'), findsOneWidget);
-        expect(find.text('Restart'), findsOneWidget);
-        expect(find.text('Return to Home'), findsOneWidget);
+        expect(find.text('Play Again'), findsOneWidget);
+        expect(find.text('Home'), findsOneWidget);
         expect(wallet.balance, 100);
       },
     );
@@ -1557,7 +1560,7 @@ void main() {
       await tester.pumpAndSettle();
       await enterAndSubmit(tester, 'lace');
 
-      await tester.tap(find.text('Restart'));
+      await tester.tap(find.text('Play Again'));
       await tester.pumpAndSettle();
 
       expect(find.byType(TextField), findsOneWidget);
@@ -1597,7 +1600,7 @@ void main() {
       await tester.pumpAndSettle();
       await enterAndSubmit(tester, 'lace');
 
-      await tester.tap(find.text('Return to Home'));
+      await tester.tap(find.text('Home'));
       await tester.pumpAndSettle();
 
       expect(find.text('Go to game'), findsOneWidget);
@@ -1628,6 +1631,14 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('Share Win'), findsOneWidget);
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Play Again'), findsOneWidget);
+      // Secondary actions stack vertically at this width: Home renders
+      // below Share Win rather than beside it.
+      expect(
+        tester.getTopLeft(find.text('Home')).dy,
+        greaterThan(tester.getTopLeft(find.text('Share Win')).dy),
+      );
 
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
@@ -1653,7 +1664,41 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('Share Win'), findsOneWidget);
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Play Again'), findsOneWidget);
+      // Large text scale forces the secondary actions to stack even though
+      // this test never shrinks the viewport width.
+      expect(
+        tester.getTopLeft(find.text('Home')).dy,
+        greaterThan(tester.getTopLeft(find.text('Share Win')).dy),
+      );
     });
+
+    testWidgets(
+      'secondary actions share one row at default text scale on a normal '
+      'width screen',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+
+        await tester.pumpWidget(buildSubject(controller, config4));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Share Win'), findsOneWidget);
+        expect(find.text('Home'), findsOneWidget);
+        // Share Win and Home sit on the same row (same vertical position)
+        // at the default test-surface width and text scale.
+        expect(
+          tester.getTopLeft(find.text('Home')).dy,
+          tester.getTopLeft(find.text('Share Win')).dy,
+        );
+      },
+    );
 
     testWidgets('the Share Win button has the exact required semantics '
         'label', (tester) async {
@@ -1669,6 +1714,48 @@ void main() {
 
       expect(find.bySemanticsLabel('Share win'), findsOneWidget);
     });
+
+    testWidgets('the Home and Play Again buttons have the exact required '
+        'semantics labels', (tester) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(find.bySemanticsLabel('Home'), findsOneWidget);
+      expect(find.bySemanticsLabel('Play again'), findsOneWidget);
+    });
+
+    testWidgets(
+      'the Home, Play Again, and Share Win buttons stay accessible at a '
+      'large text scale',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+
+        await tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2.5)),
+            child: buildSubject(controller, config4),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(tester.takeException(), isNull);
+        expect(find.bySemanticsLabel('Home'), findsOneWidget);
+        expect(find.bySemanticsLabel('Play again'), findsOneWidget);
+        expect(find.bySemanticsLabel('Share win'), findsOneWidget);
+      },
+    );
 
     group('Daily Challenge', () {
       testWidgets(
@@ -1703,6 +1790,14 @@ void main() {
 
           expect(find.text('Share Challenge'), findsOneWidget);
           expect(find.text('Share Win'), findsNothing);
+          // Daily Challenge completions use "Replay" (not "Play Again") for
+          // the primary action, alongside Home.
+          expect(find.text('Replay'), findsOneWidget);
+          expect(find.text('Play Again'), findsNothing);
+          expect(find.text('Home'), findsOneWidget);
+          expect(find.bySemanticsLabel('Replay'), findsOneWidget);
+          expect(find.bySemanticsLabel('Share challenge'), findsOneWidget);
+          expect(find.bySemanticsLabel('Home'), findsOneWidget);
         },
       );
 
@@ -1758,6 +1853,10 @@ void main() {
 
           expect(find.text('Not solved'), findsOneWidget);
           expect(find.text('Share Challenge'), findsNothing);
+          expect(find.text('Share Win'), findsNothing);
+          // A loss still shows the primary and Home actions, just no share.
+          expect(find.text('Replay'), findsOneWidget);
+          expect(find.text('Home'), findsOneWidget);
         },
       );
 
@@ -1925,8 +2024,8 @@ void main() {
 
           expect(tester.takeException(), isNull);
           expect(find.text('You won!'), findsOneWidget);
-          expect(find.text('Restart'), findsOneWidget);
-          expect(find.text('Return to Home'), findsOneWidget);
+          expect(find.text('Play Again'), findsOneWidget);
+          expect(find.text('Home'), findsOneWidget);
         },
       );
     });
