@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:cowbullgame/coin_wallet.dart';
-import 'package:cowbullgame/core/sharing/result_share_service.dart';
 import 'package:cowbullgame/features/game/controllers/game_controller.dart';
 import 'package:cowbullgame/features/game/data/word_repository.dart';
 import 'package:cowbullgame/features/game/models/game_config.dart';
@@ -9,14 +8,18 @@ import 'package:cowbullgame/features/game/models/game_difficulty.dart';
 import 'package:cowbullgame/features/game/presentation/game_screen.dart';
 import 'package:cowbullgame/features/game/services/coin_reward_calculator.dart';
 import 'package:cowbullgame/features/game/services/game_engine.dart';
+import 'package:cowbullgame/models/daily_challenge_share_data.dart';
 import 'package:cowbullgame/models/streak_feedback.dart';
 import 'package:cowbullgame/theme/app_theme.dart';
+import 'package:cowbullgame/widgets/share_cards/daily_challenge_share_card.dart';
+import 'package:cowbullgame/widgets/share_cards/normal_win_share_card.dart';
+import 'package:cowbullgame/widgets/share_cards/share_card_preview_dialog.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_game_feedback.dart';
-import '../../../support/fake_result_share_service.dart';
+import '../../../support/fake_share_card_renderer.dart';
+import '../../../support/fake_share_card_service.dart';
 
 /// A minimal [WordRepository] fake: resolves [selectSecretWord] from
 /// [wordsByLength] (keyed by word length only — these widget tests never
@@ -73,24 +76,24 @@ void main() {
     GameController controller,
     GameConfig config, {
     VoidCallback? onButtonTap,
-    ResultShareService? shareService,
+    FakeShareCardRenderer? shareCardRenderer,
+    FakeShareCardService? shareCardService,
     ValueNotifier<StreakFeedback?>? streakFeedback,
     ValueNotifier<CoinRewardBreakdown?>? coinsEarnedFeedback,
-    int? currentStreak,
-    ResultTextBuilder? resultTextBuilder,
     ValueNotifier<bool?>? dailyChallengeReplayFeedback,
+    DailyChallengeShareData? dailyChallengeShareData,
   }) {
     return MaterialApp(
       home: GameScreen(
         controller: controller,
         config: config,
         onButtonTap: onButtonTap,
-        shareService: shareService ?? FakeResultShareService(),
+        shareCardRenderer: shareCardRenderer ?? FakeShareCardRenderer(),
+        shareCardService: shareCardService ?? FakeShareCardService(),
         streakFeedback: streakFeedback,
         coinsEarnedFeedback: coinsEarnedFeedback,
-        currentStreak: currentStreak,
-        resultTextBuilder: resultTextBuilder,
         dailyChallengeReplayFeedback: dailyChallengeReplayFeedback,
+        dailyChallengeShareData: dailyChallengeShareData,
       ),
     );
   }
@@ -99,6 +102,21 @@ void main() {
     await tester.enterText(find.byType(TextField), guess);
     await tester.tap(find.text('Submit'));
     await tester.pumpAndSettle();
+  }
+
+  /// Pumps enough frames for the share-card preview sheet to finish opening
+  /// and its (fake, near-instant) render to complete.
+  ///
+  /// Deliberately not `pumpAndSettle`: the completed screen's own Share
+  /// Win/Challenge button shows an indeterminate spinner for as long as the
+  /// preview sheet stays open (see `GameScreen._openingShare`), and
+  /// `pumpAndSettle` can never treat a screen with an indeterminate spinner
+  /// as "settled" — it would time out waiting for an animation that never
+  /// naturally stops until the sheet is dismissed.
+  Future<void> pumpForPreviewToOpen(WidgetTester tester) async {
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
   }
 
   testWidgets('shows a loading indicator while starting the game', (
@@ -1256,8 +1274,8 @@ void main() {
     });
   });
 
-  group('Milestone 17: sharing', () {
-    testWidgets('the Share Result button is absent during an active game', (
+  group('Milestone 21: share cards', () {
+    testWidgets('the Share Win button is absent during an active game', (
       tester,
     ) async {
       final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
@@ -1269,10 +1287,10 @@ void main() {
       await tester.pumpWidget(buildSubject(controller, config4));
       await tester.pumpAndSettle();
 
-      expect(find.text('Share Result'), findsNothing);
+      expect(find.text('Share Win'), findsNothing);
     });
 
-    testWidgets('the Share Result button appears after a win', (tester) async {
+    testWidgets('the Share Win button appears after a win', (tester) async {
       final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
       final controller = GameController(
         wordRepository: repo,
@@ -1284,13 +1302,13 @@ void main() {
       await enterAndSubmit(tester, 'lace');
 
       expect(find.text('You won!'), findsOneWidget);
-      expect(find.text('Share Result'), findsOneWidget);
-      // Restart/Return Home remain alongside the new Share Result action.
+      expect(find.text('Share Win'), findsOneWidget);
+      // Restart/Return Home remain alongside the new Share Win action.
       expect(find.text('Restart'), findsOneWidget);
       expect(find.text('Return to Home'), findsOneWidget);
     });
 
-    testWidgets('the Share Result button appears after a loss', (tester) async {
+    testWidgets('no share action is shown after a loss', (tester) async {
       final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
       final controller = GameController(
         wordRepository: repo,
@@ -1304,206 +1322,207 @@ void main() {
       }
 
       expect(find.text('Not solved'), findsOneWidget);
-      expect(find.text('Share Result'), findsOneWidget);
+      expect(find.text('Share Win'), findsNothing);
+      expect(find.text('Share Challenge'), findsNothing);
     });
 
     testWidgets(
-      'tapping Share Result calls the share service exactly once with the '
-      'expected text and subject',
+      'tapping Share Win opens the preview, and confirming Share renders '
+      'and shares the expected card, filename, and caption exactly once',
       (tester) async {
         final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
         final controller = GameController(
           wordRepository: repo,
           gameEngine: engine,
         );
-        final shareService = FakeResultShareService();
+        final renderer = FakeShareCardRenderer();
+        final service = FakeShareCardService();
 
         await tester.pumpWidget(
-          buildSubject(controller, config4, shareService: shareService),
+          buildSubject(
+            controller,
+            config4,
+            shareCardRenderer: renderer,
+            shareCardService: service,
+          ),
         );
         await tester.pumpAndSettle();
         await enterAndSubmit(tester, 'lace');
 
-        await tester.tap(find.text('Share Result'));
+        await tester.tap(find.text('Share Win'));
+        await pumpForPreviewToOpen(tester);
+        expect(find.byType(Image), findsOneWidget);
+
+        await tester.tap(find.text('Share'));
         await tester.pumpAndSettle();
 
-        expect(shareService.calls, hasLength(1));
-        final call = shareService.calls.single;
-        expect(call.text, contains('Cow Bull Quest — Easy'));
-        expect(call.text, contains('Solved in 1/10 attempts'));
-        expect(call.text.toLowerCase(), isNot(contains('lace')));
-        expect(call.subject, 'My Cow Bull Quest result');
+        expect(renderer.renderedCards, hasLength(1));
+        expect(renderer.renderedCards.single, isA<NormalWinShareCard>());
+        expect(service.calls, hasLength(1));
+        final call = service.calls.single;
+        expect(call.fileName, 'cow-bull-quest-win.png');
+        expect(
+          call.caption,
+          'Cow Bull Quest\nSolved in 1/10 attempts.\nCan you solve it too?',
+        );
+        expect(call.caption.toLowerCase(), isNot(contains('lace')));
       },
     );
 
     testWidgets(
-      'rapid repeated taps on Share Result cannot open multiple share '
-      'sheets',
+      'rapid repeated taps on Share Win open only one preview sheet',
       (tester) async {
         final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
         final controller = GameController(
           wordRepository: repo,
           gameEngine: engine,
         );
-        final shareService = FakeResultShareService();
-        // A real platform share call always takes some real time; holding
-        // this one open on a gate (rather than letting the fake resolve
-        // immediately) keeps the share deterministically "in flight" across
-        // both taps below, so the second tap genuinely exercises the
-        // in-flight guard instead of racing Dart's microtask queue against
-        // an instantly-resolving fake.
-        final gate = Completer<void>();
-        shareService.delay = gate.future;
+        final renderer = FakeShareCardRenderer()
+          ..delay = Completer<void>().future;
 
         await tester.pumpWidget(
-          buildSubject(controller, config4, shareService: shareService),
+          buildSubject(controller, config4, shareCardRenderer: renderer),
         );
         await tester.pumpAndSettle();
         await enterAndSubmit(tester, 'lace');
 
-        await tester.tap(find.text('Share Result'));
-        await tester.tap(find.text('Share Result'), warnIfMissed: false);
-        gate.complete();
-        await tester.pumpAndSettle();
+        await tester.tap(find.text('Share Win'));
+        await tester.tap(find.text('Share Win'), warnIfMissed: false);
+        await tester.pump();
 
-        expect(shareService.calls, hasLength(1));
+        expect(find.byType(BottomSheet), findsOneWidget);
       },
     );
 
-    testWidgets('a share failure shows readable feedback and does not '
-        'crash', (tester) async {
+    testWidgets(
+      'a render failure shows a friendly message and does not crash',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+        final renderer = FakeShareCardRenderer()..failWith = Exception('boom');
+
+        await tester.pumpWidget(
+          buildSubject(controller, config4, shareCardRenderer: renderer),
+        );
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        await tester.tap(find.text('Share Win'));
+        await pumpForPreviewToOpen(tester);
+
+        expect(tester.takeException(), isNull);
+        expect(find.text(shareCardFailureMessage), findsOneWidget);
+        expect(find.textContaining('Exception'), findsNothing);
+        expect(find.textContaining('boom'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'sharing does not alter the completed game, coins, or navigation',
+      (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final wallet = CoinWallet(initialBalance: 100);
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+          coinWallet: wallet,
+        );
+
+        await tester.pumpWidget(buildSubject(controller, config4));
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        await tester.tap(find.text('Share Win'));
+        await pumpForPreviewToOpen(tester);
+        await tester.tap(find.text('Share'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('You won!'), findsOneWidget);
+        expect(find.text('Restart'), findsOneWidget);
+        expect(find.text('Return to Home'), findsOneWidget);
+        expect(wallet.balance, 100);
+      },
+    );
+
+    testWidgets('closing the preview with Cancel performs no share', (
+      tester,
+    ) async {
       final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
       final controller = GameController(
         wordRepository: repo,
         gameEngine: engine,
       );
-      final shareService = FakeResultShareService()
-        ..failWith = Exception('boom');
+      final service = FakeShareCardService();
 
       await tester.pumpWidget(
-        buildSubject(controller, config4, shareService: shareService),
+        buildSubject(controller, config4, shareCardService: service),
       );
       await tester.pumpAndSettle();
       await enterAndSubmit(tester, 'lace');
 
-      await tester.tap(find.text('Share Result'));
-      // Deliberately not pumpAndSettle: the shown SnackBar auto-dismisses on
-      // its own timer, and pumpAndSettle would pump straight through that
-      // entire lifecycle. A couple of bounded pumps is enough to let the
-      // async share attempt fail and the SnackBar's entrance animation
-      // complete, while it's still on screen to assert against.
-      await tester.pump();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 750));
-
-      expect(tester.takeException(), isNull);
-      expect(
-        find.text("Couldn't share your result. Please try again."),
-        findsOneWidget,
-      );
-      expect(find.textContaining('Exception'), findsNothing);
-      expect(find.textContaining('boom'), findsNothing);
-    });
-
-    testWidgets('share completion does not alter the completed game, coins, or '
-        'navigation', (tester) async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
-      final wallet = CoinWallet(initialBalance: 100);
-      final controller = GameController(
-        wordRepository: repo,
-        gameEngine: engine,
-        coinWallet: wallet,
-      );
-      final shareService = FakeResultShareService();
-
-      await tester.pumpWidget(
-        buildSubject(controller, config4, shareService: shareService),
-      );
-      await tester.pumpAndSettle();
-      await enterAndSubmit(tester, 'lace');
-
-      await tester.tap(find.text('Share Result'));
+      await tester.tap(find.text('Share Win'));
+      await pumpForPreviewToOpen(tester);
+      await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
 
+      expect(service.calls, isEmpty);
       expect(find.text('You won!'), findsOneWidget);
-      expect(find.text('Restart'), findsOneWidget);
-      expect(find.text('Return to Home'), findsOneWidget);
-      expect(wallet.balance, 100);
-    });
-
-    testWidgets('no success message is shown merely because the share '
-        'sheet opened', (tester) async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
-      final controller = GameController(
-        wordRepository: repo,
-        gameEngine: engine,
-      );
-      final shareService = FakeResultShareService();
-
-      await tester.pumpWidget(
-        buildSubject(controller, config4, shareService: shareService),
-      );
-      await tester.pumpAndSettle();
-      await enterAndSubmit(tester, 'lace');
-
-      await tester.tap(find.text('Share Result'));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(SnackBar), findsNothing);
-    });
-
-    testWidgets('rebuilding the completed screen does not invoke sharing', (
-      tester,
-    ) async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
-      final controller = GameController(
-        wordRepository: repo,
-        gameEngine: engine,
-      );
-      final shareService = FakeResultShareService();
-
-      await tester.pumpWidget(
-        buildSubject(controller, config4, shareService: shareService),
-      );
-      await tester.pumpAndSettle();
-      await enterAndSubmit(tester, 'lace');
-
-      await tester.pump();
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(shareService.calls, isEmpty);
     });
 
     testWidgets(
-      'win sound/haptics are not replayed when Share Result is tapped',
+      'rebuilding the completed screen does not invoke rendering or sharing',
       (tester) async {
         final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
-        final feedback = FakeGameFeedback();
         final controller = GameController(
           wordRepository: repo,
           gameEngine: engine,
-          feedback: feedback,
         );
-        final shareService = FakeResultShareService();
+        final renderer = FakeShareCardRenderer();
 
         await tester.pumpWidget(
-          buildSubject(controller, config4, shareService: shareService),
+          buildSubject(controller, config4, shareCardRenderer: renderer),
         );
         await tester.pumpAndSettle();
         await enterAndSubmit(tester, 'lace');
 
-        expect(feedback.calls.where((c) => c == 'onGameWon'), hasLength(1));
-
-        await tester.tap(find.text('Share Result'));
+        await tester.pump();
+        await tester.pump();
         await tester.pumpAndSettle();
 
-        expect(feedback.calls.where((c) => c == 'onGameWon'), hasLength(1));
-        expect(feedback.calls.where((c) => c == 'onGameLost'), isEmpty);
+        expect(renderer.renderedCards, isEmpty);
       },
     );
 
-    testWidgets('Share Result reuses the button-tap sound via onButtonTap', (
+    testWidgets('win sound/haptics are not replayed when Share Win is tapped', (
+      tester,
+    ) async {
+      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+      final feedback = FakeGameFeedback();
+      final controller = GameController(
+        wordRepository: repo,
+        gameEngine: engine,
+        feedback: feedback,
+      );
+
+      await tester.pumpWidget(buildSubject(controller, config4));
+      await tester.pumpAndSettle();
+      await enterAndSubmit(tester, 'lace');
+
+      expect(feedback.calls.where((c) => c == 'onGameWon'), hasLength(1));
+
+      await tester.tap(find.text('Share Win'));
+      await pumpForPreviewToOpen(tester);
+      await tester.tap(find.text('Share'));
+      await tester.pumpAndSettle();
+
+      expect(feedback.calls.where((c) => c == 'onGameWon'), hasLength(1));
+      expect(feedback.calls.where((c) => c == 'onGameLost'), isEmpty);
+    });
+
+    testWidgets('Share Win reuses the button-tap sound via onButtonTap', (
       tester,
     ) async {
       final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
@@ -1511,30 +1530,23 @@ void main() {
         wordRepository: repo,
         gameEngine: engine,
       );
-      final shareService = FakeResultShareService();
       var tapCount = 0;
 
       await tester.pumpWidget(
-        buildSubject(
-          controller,
-          config4,
-          shareService: shareService,
-          onButtonTap: () => tapCount++,
-        ),
+        buildSubject(controller, config4, onButtonTap: () => tapCount++),
       );
       await tester.pumpAndSettle();
       await enterAndSubmit(tester, 'lace');
       tapCount = 0; // a valid guess/win never itself calls onButtonTap
 
-      await tester.tap(find.text('Share Result'));
-      await tester.pumpAndSettle();
+      await tester.tap(find.text('Share Win'));
+      await pumpForPreviewToOpen(tester);
 
       expect(tapCount, 1);
-      expect(shareService.calls, hasLength(1));
     });
 
-    testWidgets('Restart still works from the completed screen with '
-        'sharing controls present', (tester) async {
+    testWidgets('Restart still works from the completed screen with the '
+        'share action present', (tester) async {
       final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
       final controller = GameController(
         wordRepository: repo,
@@ -1549,12 +1561,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(TextField), findsOneWidget);
-      expect(find.text('Share Result'), findsNothing);
+      expect(find.text('Share Win'), findsNothing);
       expect(find.textContaining('0 of 10 attempts used'), findsOneWidget);
     });
 
-    testWidgets('Return Home still works from the completed screen with '
-        'sharing controls present', (tester) async {
+    testWidgets('Return Home still works from the completed screen with the '
+        'share action present', (tester) async {
       final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
       final controller = GameController(
         wordRepository: repo,
@@ -1569,11 +1581,8 @@ void main() {
                 child: TextButton(
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => GameScreen(
-                        controller: controller,
-                        config: config4,
-                        shareService: FakeResultShareService(),
-                      ),
+                      builder: (_) =>
+                          GameScreen(controller: controller, config: config4),
                     ),
                   ),
                   child: const Text('Go to game'),
@@ -1594,7 +1603,7 @@ void main() {
       expect(find.text('Go to game'), findsOneWidget);
     });
 
-    testWidgets('does not overflow on a narrow screen with sharing controls '
+    testWidgets('does not overflow on a narrow screen with the share action '
         'visible', (tester) async {
       // The physical size is reset explicitly at the end of this test body,
       // not via addTearDown: resetting during Flutter's own teardown phase
@@ -1618,15 +1627,15 @@ void main() {
       await enterAndSubmit(tester, 'lace');
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Share Result'), findsOneWidget);
+      expect(find.text('Share Win'), findsOneWidget);
 
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
       await tester.pump();
     });
 
-    testWidgets('does not overflow under large text scaling with sharing '
-        'controls visible', (tester) async {
+    testWidgets('does not overflow under large text scaling with the share '
+        'action visible', (tester) async {
       final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
       final controller = GameController(
         wordRepository: repo,
@@ -1643,12 +1652,11 @@ void main() {
       await enterAndSubmit(tester, 'lace');
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Share Result'), findsOneWidget);
+      expect(find.text('Share Win'), findsOneWidget);
     });
 
-    testWidgets('the Share Result button has a clear semantics label', (
-      tester,
-    ) async {
+    testWidgets('the Share Win button has the exact required semantics '
+        'label', (tester) async {
       final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
       final controller = GameController(
         wordRepository: repo,
@@ -1659,68 +1667,181 @@ void main() {
       await tester.pumpAndSettle();
       await enterAndSubmit(tester, 'lace');
 
-      expect(find.bySemanticsLabel('Share Result'), findsOneWidget);
+      expect(find.bySemanticsLabel('Share win'), findsOneWidget);
     });
 
-    testWidgets('Copy Result copies the same privacy-safe text and shows a '
-        'confirmation', (tester) async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
-      final controller = GameController(
-        wordRepository: repo,
-        gameEngine: engine,
-      );
-      final clipboardCalls = <Map<Object?, Object?>>[];
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        (call) async {
-          if (call.method == 'Clipboard.setData') {
-            clipboardCalls.add(call.arguments as Map<Object?, Object?>);
-          }
-          return null;
+    group('Daily Challenge', () {
+      testWidgets(
+        'shows Share Challenge (not Share Win) for an official win, even '
+        'on a replay completion',
+        (tester) async {
+          final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+          final controller = GameController(
+            wordRepository: repo,
+            gameEngine: engine,
+          );
+          final replayFeedback = ValueNotifier<bool?>(true);
+          final shareData = DailyChallengeShareData(
+            dateLabel: '20 JULY 2026',
+            attemptsUsed: 4,
+            maxAttempts: 10,
+            hintsUsed: 0,
+            coinsEarned: 25,
+            currentStreak: 5,
+          );
+
+          await tester.pumpWidget(
+            buildSubject(
+              controller,
+              config4,
+              dailyChallengeReplayFeedback: replayFeedback,
+              dailyChallengeShareData: shareData,
+            ),
+          );
+          await tester.pumpAndSettle();
+          await enterAndSubmit(tester, 'lace');
+
+          expect(find.text('Share Challenge'), findsOneWidget);
+          expect(find.text('Share Win'), findsNothing);
         },
       );
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.platform,
-          null,
-        ),
+
+      testWidgets(
+        'shows no share action for an official loss, even if this replay '
+        'wins',
+        (tester) async {
+          final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+          final controller = GameController(
+            wordRepository: repo,
+            gameEngine: engine,
+          );
+          final replayFeedback = ValueNotifier<bool?>(true);
+
+          await tester.pumpWidget(
+            buildSubject(
+              controller,
+              config4,
+              dailyChallengeReplayFeedback: replayFeedback,
+              dailyChallengeShareData: null,
+            ),
+          );
+          await tester.pumpAndSettle();
+          await enterAndSubmit(tester, 'lace');
+
+          expect(find.text('Share Challenge'), findsNothing);
+          expect(find.text('Share Win'), findsNothing);
+        },
       );
 
-      await tester.pumpWidget(buildSubject(controller, config4));
-      await tester.pumpAndSettle();
-      await enterAndSubmit(tester, 'lace');
+      testWidgets(
+        'shows no share action for an official Daily Challenge loss',
+        (tester) async {
+          final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+          final controller = GameController(
+            wordRepository: repo,
+            gameEngine: engine,
+          );
+          final replayFeedback = ValueNotifier<bool?>(false);
 
-      await tester.tap(find.byIcon(Icons.copy));
-      // Deliberately not pumpAndSettle: the shown SnackBar auto-dismisses
-      // on its own timer, and pumpAndSettle would pump straight through
-      // that entire lifecycle. A couple of bounded pumps is enough for the
-      // confirmation to appear while it's still on screen to assert
-      // against.
-      await tester.pump();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 750));
+          await tester.pumpWidget(
+            buildSubject(
+              controller,
+              config4,
+              dailyChallengeReplayFeedback: replayFeedback,
+              dailyChallengeShareData: null,
+            ),
+          );
+          await tester.pumpAndSettle();
+          for (var i = 0; i < 10; i++) {
+            await enterAndSubmit(tester, 'mock');
+          }
 
-      expect(clipboardCalls, hasLength(1));
-      final copiedText = clipboardCalls.single['text'] as String;
-      expect(copiedText, contains('Cow Bull Quest — Easy'));
-      expect(copiedText.toLowerCase(), isNot(contains('lace')));
-      expect(find.text('Result copied.'), findsOneWidget);
-    });
-
-    testWidgets('the Copy Result button has a clear semantics label', (
-      tester,
-    ) async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
-      final controller = GameController(
-        wordRepository: repo,
-        gameEngine: engine,
+          expect(find.text('Not solved'), findsOneWidget);
+          expect(find.text('Share Challenge'), findsNothing);
+        },
       );
 
-      await tester.pumpWidget(buildSubject(controller, config4));
-      await tester.pumpAndSettle();
-      await enterAndSubmit(tester, 'lace');
+      testWidgets(
+        'tapping Share Challenge shares the DailyChallengeShareCard with '
+        'the exact required caption',
+        (tester) async {
+          final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+          final controller = GameController(
+            wordRepository: repo,
+            gameEngine: engine,
+          );
+          final replayFeedback = ValueNotifier<bool?>(false);
+          final renderer = FakeShareCardRenderer();
+          final service = FakeShareCardService();
+          final shareData = DailyChallengeShareData(
+            dateLabel: '20 JULY 2026',
+            attemptsUsed: 1,
+            maxAttempts: 10,
+            hintsUsed: 0,
+            coinsEarned: 25,
+            currentStreak: 5,
+          );
 
-      expect(find.bySemanticsLabel('Copy Result'), findsOneWidget);
+          await tester.pumpWidget(
+            buildSubject(
+              controller,
+              config4,
+              dailyChallengeReplayFeedback: replayFeedback,
+              dailyChallengeShareData: shareData,
+              shareCardRenderer: renderer,
+              shareCardService: service,
+            ),
+          );
+          await tester.pumpAndSettle();
+          await enterAndSubmit(tester, 'lace');
+
+          await tester.tap(find.text('Share Challenge'));
+          await pumpForPreviewToOpen(tester);
+          await tester.tap(find.text('Share'));
+          await tester.pumpAndSettle();
+
+          expect(renderer.renderedCards.single, isA<DailyChallengeShareCard>());
+          final call = service.calls.single;
+          expect(call.fileName, 'cow-bull-quest-daily-challenge.png');
+          expect(
+            call.caption,
+            'Cow Bull Quest Daily Challenge\n'
+            'Solved in 1/10 attempts.\n'
+            "Can you beat today's challenge?",
+          );
+        },
+      );
+
+      testWidgets('the Share Challenge button has the exact required '
+          'semantics label', (tester) async {
+        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
+        final controller = GameController(
+          wordRepository: repo,
+          gameEngine: engine,
+        );
+        final replayFeedback = ValueNotifier<bool?>(false);
+        final shareData = DailyChallengeShareData(
+          dateLabel: '20 JULY 2026',
+          attemptsUsed: 1,
+          maxAttempts: 10,
+          hintsUsed: 0,
+          coinsEarned: 25,
+          currentStreak: 5,
+        );
+
+        await tester.pumpWidget(
+          buildSubject(
+            controller,
+            config4,
+            dailyChallengeReplayFeedback: replayFeedback,
+            dailyChallengeShareData: shareData,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await enterAndSubmit(tester, 'lace');
+
+        expect(find.bySemanticsLabel('Share challenge'), findsOneWidget);
+      });
     });
 
     group('resilience', () {
@@ -1731,19 +1852,21 @@ void main() {
           wordRepository: repo,
           gameEngine: engine,
         );
-        final shareService = FakeResultShareService();
+        final service = FakeShareCardService();
 
         await tester.pumpWidget(
-          buildSubject(controller, config4, shareService: shareService),
+          buildSubject(controller, config4, shareCardService: service),
         );
         await tester.pumpAndSettle();
         await enterAndSubmit(tester, 'lace');
 
-        await tester.tap(find.text('Share Result'));
+        await tester.tap(find.text('Share Win'));
+        await pumpForPreviewToOpen(tester);
+        await tester.tap(find.text('Share'));
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
-        expect(shareService.calls, hasLength(1));
+        expect(service.calls, hasLength(1));
       });
 
       testWidgets('sharing works with animations disabled', (tester) async {
@@ -1752,26 +1875,24 @@ void main() {
           wordRepository: repo,
           gameEngine: engine,
         );
-        final shareService = FakeResultShareService();
+        final service = FakeShareCardService();
 
         await tester.pumpWidget(
           MediaQuery(
             data: const MediaQueryData(disableAnimations: true),
-            child: buildSubject(
-              controller,
-              config4,
-              shareService: shareService,
-            ),
+            child: buildSubject(controller, config4, shareCardService: service),
           ),
         );
         await tester.pumpAndSettle();
         await enterAndSubmit(tester, 'lace');
 
-        await tester.tap(find.text('Share Result'));
+        await tester.tap(find.text('Share Win'));
+        await pumpForPreviewToOpen(tester);
+        await tester.tap(find.text('Share'));
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
-        expect(shareService.calls, hasLength(1));
+        expect(service.calls, hasLength(1));
       });
 
       testWidgets(
@@ -1783,22 +1904,24 @@ void main() {
             wordRepository: repo,
             gameEngine: engine,
           );
-          final shareService = FakeResultShareService()
+          final service = FakeShareCardService()
             ..failWith = StateError('platform channel unavailable');
 
           await tester.pumpWidget(
-            buildSubject(controller, config4, shareService: shareService),
+            buildSubject(controller, config4, shareCardService: service),
           );
           await tester.pumpAndSettle();
           await enterAndSubmit(tester, 'lace');
 
-          await tester.tap(find.text('Share Result'));
-          // Deliberately not pumpAndSettle: the failure SnackBar
-          // auto-dismisses on its own timer (see the identical note on the
-          // "share failure" test above).
-          await tester.pump();
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 750));
+          await tester.tap(find.text('Share Win'));
+          await pumpForPreviewToOpen(tester);
+          await tester.tap(find.text('Share'));
+          // Deliberately not pumpAndSettle: a failed share leaves the
+          // preview sheet open (showing the friendly error message) rather
+          // than closing it, so the completed screen's own Share Win
+          // button keeps its indeterminate spinner going — exactly like
+          // pumpForPreviewToOpen's own doc explains.
+          await pumpForPreviewToOpen(tester);
 
           expect(tester.takeException(), isNull);
           expect(find.text('You won!'), findsOneWidget);
@@ -1937,89 +2060,6 @@ void main() {
         expect(find.textContaining('Streak started: 1 day'), findsOneWidget);
       },
     );
-
-    testWidgets(
-      'resultTextBuilder overrides Share/Copy text instead of the default '
-      'formatter',
-      (tester) async {
-        final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
-        final controller = GameController(
-          wordRepository: repo,
-          gameEngine: engine,
-        );
-        final clipboardCalls = <Map<Object?, Object?>>[];
-        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.platform,
-          (call) async {
-            if (call.method == 'Clipboard.setData') {
-              clipboardCalls.add(call.arguments as Map<Object?, Object?>);
-            }
-            return null;
-          },
-        );
-        addTearDown(
-          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-            SystemChannels.platform,
-            null,
-          ),
-        );
-
-        await tester.pumpWidget(
-          buildSubject(
-            controller,
-            config4,
-            resultTextBuilder: (state, hintsUsed) => 'custom override text',
-          ),
-        );
-        await tester.pumpAndSettle();
-        await enterAndSubmit(tester, 'lace');
-
-        await tester.ensureVisible(find.byIcon(Icons.copy));
-        await tester.tap(find.byIcon(Icons.copy));
-        await tester.pump();
-
-        expect(clipboardCalls, hasLength(1));
-        expect(clipboardCalls.single['text'], 'custom override text');
-      },
-    );
-
-    testWidgets('currentStreak adds a streak line to the default share text', (
-      tester,
-    ) async {
-      final repo = _FakeWordRepository()..wordsByLength[4] = 'lace';
-      final controller = GameController(
-        wordRepository: repo,
-        gameEngine: engine,
-      );
-      final clipboardCalls = <Map<Object?, Object?>>[];
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        (call) async {
-          if (call.method == 'Clipboard.setData') {
-            clipboardCalls.add(call.arguments as Map<Object?, Object?>);
-          }
-          return null;
-        },
-      );
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.platform,
-          null,
-        ),
-      );
-
-      await tester.pumpWidget(
-        buildSubject(controller, config4, currentStreak: 5),
-      );
-      await tester.pumpAndSettle();
-      await enterAndSubmit(tester, 'lace');
-
-      await tester.ensureVisible(find.byIcon(Icons.copy));
-      await tester.tap(find.byIcon(Icons.copy));
-      await tester.pump();
-
-      expect(clipboardCalls.single['text'], contains('🔥 5-day streak'));
-    });
   });
 
   group('Milestone 19: coin reward feedback', () {

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/sharing/share_card_renderer.dart';
+import '../../../../core/sharing/share_card_service.dart';
 import '../../../../theme/app_spacing.dart';
 import '../../../../theme/app_status_colors.dart';
+import '../../../../widgets/share_cards/share_streak_button.dart';
 
 /// Shows the daily-play streak: consecutive local calendar days with at
 /// least one completed game.
@@ -17,10 +20,22 @@ class StreakSummaryCard extends StatelessWidget {
     super.key,
     required this.currentStreak,
     required this.longestStreak,
+    this.shareCardRenderer = const OffscreenShareCardRenderer(),
+    this.shareCardService = const SharePlusShareCardService(),
   });
 
   final int currentStreak;
   final int longestStreak;
+
+  /// Renders the streak share card to PNG bytes, used by this card's Share
+  /// Streak button. Defaults to the real, offscreen-capture implementation;
+  /// tests substitute a fake so no real widget-tree capture is ever driven.
+  final ShareCardRenderer shareCardRenderer;
+
+  /// Hands the rendered streak share card to the system share sheet.
+  /// Defaults to the real, `share_plus`-backed implementation; tests
+  /// substitute a fake so no platform channel is ever touched.
+  final ShareCardService shareCardService;
 
   @override
   Widget build(BuildContext context) {
@@ -41,9 +56,16 @@ class StreakSummaryCard extends StatelessWidget {
               children: [
                 Icon(Icons.local_fire_department, color: flameColor, size: 20),
                 const SizedBox(width: AppSpacing.xs),
-                Semantics(
-                  header: true,
-                  child: Text('Daily Streak', style: textTheme.titleMedium),
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text('Daily Streak', style: textTheme.titleMedium),
+                  ),
+                ),
+                ShareStreakButton(
+                  currentStreak: currentStreak,
+                  renderer: shareCardRenderer,
+                  service: shareCardService,
                 ),
               ],
             ),

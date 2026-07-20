@@ -4,6 +4,9 @@ import 'package:cowbullgame/models/difficulty_selection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/fake_share_card_renderer.dart';
+import '../../../support/fake_share_card_service.dart';
+
 void main() {
   Widget buildSubject(
     void Function(DifficultyOption difficulty) onStartGame, {
@@ -18,6 +21,8 @@ void main() {
     String dailyChallengeDateLabel = '18 July 2026',
     VoidCallback? onOpenDailyChallenge,
     ValueChanged<DifficultyOption>? onDifficultySelected,
+    FakeShareCardRenderer? shareCardRenderer,
+    FakeShareCardService? shareCardService,
   }) {
     return MaterialApp(
       home: HomeScreen(
@@ -32,8 +37,22 @@ void main() {
         dailyChallengeDateLabel: dailyChallengeDateLabel,
         onOpenDailyChallenge: onOpenDailyChallenge ?? () {},
         onDifficultySelected: onDifficultySelected,
+        shareCardRenderer: shareCardRenderer ?? FakeShareCardRenderer(),
+        shareCardService: shareCardService ?? FakeShareCardService(),
       ),
     );
+  }
+
+  /// Pumps enough frames for the share-card preview sheet to finish opening
+  /// and its (fake, near-instant) render to complete.
+  ///
+  /// Deliberately not `pumpAndSettle`: `ShareStreakButton` shows an
+  /// indeterminate spinner for as long as the preview sheet stays open,
+  /// which `pumpAndSettle` can never treat as "settled".
+  Future<void> pumpForPreviewToOpen(WidgetTester tester) async {
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
   }
 
   testWidgets('shows the app title', (tester) async {
@@ -636,6 +655,72 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Milestone 21: Share Streak', () {
+    testWidgets('the Share Streak button is hidden when current streak is 0', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject((_) {}, currentStreak: 0));
+
+      expect(find.bySemanticsLabel('Share streak'), findsNothing);
+    });
+
+    testWidgets('the Share Streak button appears when current streak is '
+        'at least 1', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}, currentStreak: 1));
+
+      expect(find.bySemanticsLabel('Share streak'), findsOneWidget);
+    });
+
+    testWidgets(
+      'tapping Share Streak opens the preview and shares the streak card',
+      (tester) async {
+        final renderer = FakeShareCardRenderer();
+        final service = FakeShareCardService();
+
+        await tester.pumpWidget(
+          buildSubject(
+            (_) {},
+            currentStreak: 7,
+            shareCardRenderer: renderer,
+            shareCardService: service,
+          ),
+        );
+
+        await tester.tap(find.bySemanticsLabel('Share streak'));
+        await pumpForPreviewToOpen(tester);
+        expect(find.text('Share preview'), findsOneWidget);
+
+        await tester.tap(find.text('Share'));
+        await tester.pumpAndSettle();
+
+        expect(service.calls, hasLength(1));
+        final call = service.calls.single;
+        expect(call.fileName, 'cow-bull-quest-streak-7-days.png');
+        expect(
+          call.caption,
+          'Cow Bull Quest\nI reached a 7-day streak.\n'
+          "What's your biggest streak?",
+        );
+      },
+    );
+
+    testWidgets('sharing the streak does not change the displayed streak', (
+      tester,
+    ) async {
+      final service = FakeShareCardService();
+      await tester.pumpWidget(
+        buildSubject((_) {}, currentStreak: 3, shareCardService: service),
+      );
+
+      await tester.tap(find.bySemanticsLabel('Share streak'));
+      await pumpForPreviewToOpen(tester);
+      await tester.tap(find.text('Share'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('3-day streak'), findsOneWidget);
     });
   });
 }

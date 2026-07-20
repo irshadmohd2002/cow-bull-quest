@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/sharing/share_card_renderer.dart';
+import '../../../core/sharing/share_card_service.dart';
 import '../../../models/difficulty_selection.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_spacing.dart';
 import '../../../theme/app_status_colors.dart';
 import '../../../widgets/coin_balance_badge.dart';
+import '../../../widgets/share_cards/share_streak_button.dart';
 import '../models/daily_challenge_card_status.dart';
 
 /// Concise, human-facing label for [option]. Presentation-layer concern —
@@ -74,6 +77,8 @@ class HomeScreen extends StatefulWidget {
     required this.dailyChallengeDateLabel,
     required this.onOpenDailyChallenge,
     this.onDifficultySelected,
+    this.shareCardRenderer = const OffscreenShareCardRenderer(),
+    this.shareCardService = const SharePlusShareCardService(),
   });
 
   /// Called with the chosen difficulty when the player starts a game. Every
@@ -129,6 +134,17 @@ class HomeScreen extends StatefulWidget {
   /// app-level composition root supplies the real behavior (see `app.dart`).
   final ValueChanged<DifficultyOption>? onDifficultySelected;
 
+  /// Renders the streak share card to PNG bytes, used by the streak row's
+  /// Share Streak button. Defaults to the real, offscreen-capture
+  /// implementation; tests substitute a fake so no real widget-tree capture
+  /// is ever driven.
+  final ShareCardRenderer shareCardRenderer;
+
+  /// Hands the rendered streak share card to the system share sheet.
+  /// Defaults to the real, `share_plus`-backed implementation; tests
+  /// substitute a fake so no platform channel is ever touched.
+  final ShareCardService shareCardService;
+
   /// The difficulty preselected when Home first appears. `common` — the
   /// broadest, middle-of-the-road pool — is the least surprising default
   /// for a first-time player, neither the easiest nor the hardest option.
@@ -177,6 +193,8 @@ class _HomeScreenState extends State<HomeScreen> {
               _StreakSummaryRow(
                 currentStreak: widget.currentStreak,
                 longestStreak: widget.longestStreak,
+                shareCardRenderer: widget.shareCardRenderer,
+                shareCardService: widget.shareCardService,
               ),
               const SizedBox(height: AppSpacing.md),
               _DailyChallengeCard(
@@ -452,10 +470,14 @@ class _StreakSummaryRow extends StatelessWidget {
   const _StreakSummaryRow({
     required this.currentStreak,
     required this.longestStreak,
+    required this.shareCardRenderer,
+    required this.shareCardService,
   });
 
   final int currentStreak;
   final int longestStreak;
+  final ShareCardRenderer shareCardRenderer;
+  final ShareCardService shareCardService;
 
   @override
   Widget build(BuildContext context) {
@@ -467,41 +489,63 @@ class _StreakSummaryRow extends StatelessWidget {
         ? (statusColors?.success ?? colorScheme.tertiary)
         : colorScheme.onSurfaceVariant;
 
-    return Semantics(
-      container: true,
-      label:
-          '$currentStreak-day streak. '
-          'Best: ${_dayCount(longestStreak)}.',
-      child: ExcludeSemantics(
-        child: Row(
-          children: [
-            Icon(
-              Icons.local_fire_department_rounded,
-              color: flameColor,
-              size: 26,
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$currentStreak-day streak',
-                  style: textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+    return Row(
+      children: [
+        Expanded(
+          child: Semantics(
+            container: true,
+            label:
+                '$currentStreak-day streak. '
+                'Best: ${_dayCount(longestStreak)}.',
+            child: ExcludeSemantics(
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.local_fire_department_rounded,
+                    color: flameColor,
+                    size: 26,
                   ),
-                ),
-                Text(
-                  'Best: ${_dayCount(longestStreak)}',
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$currentStreak-day streak',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          'Best: ${_dayCount(longestStreak)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ],
+          ),
         ),
-      ),
+        // Deliberately a sibling of the Semantics/ExcludeSemantics pair
+        // above, not a child of it — so this button keeps its own
+        // accessible name ("Share streak") rather than being silently
+        // excluded from the accessibility tree along with the rest of this
+        // row.
+        ShareStreakButton(
+          currentStreak: currentStreak,
+          renderer: shareCardRenderer,
+          service: shareCardService,
+        ),
+      ],
     );
   }
 

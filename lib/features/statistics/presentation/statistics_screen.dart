@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/sharing/share_card_renderer.dart';
+import '../../../core/sharing/share_card_service.dart';
 import '../../../models/difficulty_selection.dart';
 import '../../../theme/app_spacing.dart';
 import '../controllers/statistics_controller_state.dart';
@@ -82,6 +84,8 @@ class StatisticsScreen extends StatelessWidget {
     required this.totalCoinsSpent,
     required this.dailyChallengesCompleted,
     required this.dailyChallengesWon,
+    this.shareCardRenderer = const OffscreenShareCardRenderer(),
+    this.shareCardService = const SharePlusShareCardService(),
   });
 
   /// The current statistics lifecycle state to render.
@@ -115,6 +119,17 @@ class StatisticsScreen extends StatelessWidget {
   final int dailyChallengesCompleted;
   final int dailyChallengesWon;
 
+  /// Renders the streak share card to PNG bytes, used by
+  /// [StreakSummaryCard]'s Share Streak button. Defaults to the real,
+  /// offscreen-capture implementation; tests substitute a fake so no real
+  /// widget-tree capture is ever driven.
+  final ShareCardRenderer shareCardRenderer;
+
+  /// Hands the rendered streak share card to the system share sheet.
+  /// Defaults to the real, `share_plus`-backed implementation; tests
+  /// substitute a fake so no platform channel is ever touched.
+  final ShareCardService shareCardService;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -137,6 +152,8 @@ class StatisticsScreen extends StatelessWidget {
               StreakSummaryCard(
                 currentStreak: currentStreak,
                 longestStreak: longestStreak,
+                shareCardRenderer: shareCardRenderer,
+                shareCardService: shareCardService,
               ),
               const SizedBox(height: AppSpacing.md),
               CoinSummaryCard(

@@ -1,52 +1,37 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
-import '../../../core/sharing/result_share_service.dart';
-import '../../../core/sharing/share_plus_result_share_service.dart';
+import '../../../core/sharing/share_card_renderer.dart';
+import '../../../core/sharing/share_card_service.dart';
+import '../../../models/daily_challenge_share_data.dart';
+import '../../../models/normal_win_share_data.dart';
 import '../../../models/streak_feedback.dart';
+import '../../../services/share_caption_formatter.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_spacing.dart';
 import '../../../theme/app_status_colors.dart';
 import '../../../widgets/coin_balance_badge.dart';
 import '../../../widgets/confirm_dialog.dart';
+import '../../../widgets/share_cards/daily_challenge_share_card.dart';
+import '../../../widgets/share_cards/normal_win_share_card.dart';
+import '../../../widgets/share_cards/share_card_preview_dialog.dart';
 import '../controllers/game_controller.dart';
 import '../controllers/game_controller_state.dart';
 import '../models/game_config.dart';
 import '../models/game_difficulty.dart';
 import '../models/game_status.dart';
 import '../services/coin_reward_calculator.dart';
-import '../services/game_result_share_formatter.dart';
 import '../services/guess_validator.dart';
 import 'widgets/game_status_panel.dart';
 import 'widgets/guess_history.dart';
 import 'widgets/guess_input.dart';
 import 'widgets/hint_section.dart';
 
-/// Formats a completed game's result into shareable text. Stateless and
-/// pure, so a single module-level instance is reused for every share/copy
-/// request rather than constructed per call.
-const GameResultShareFormatter _resultFormatter = GameResultShareFormatter();
-
-/// Overrides how a completed game's Share/Copy text is built, in place of
-/// the default [_resultFormatter] call.
-///
-/// Exists solely so the Daily Challenge can share/copy its *official*
-/// result — even when the live [state]/[hintsUsed] belong to a practice
-/// replay — without [GameScreen] needing to know anything about Daily
-/// Challenges, official results, or replays at all: the app-level
-/// composition root supplies a builder that ignores [state]/[hintsUsed]
-/// entirely and formats the cached official result instead (see app.dart).
-/// `null` (the default for every normal game) preserves this screen's
-/// original behavior exactly.
-typedef ResultTextBuilder = String Function(GameCompleted state, int hintsUsed);
-
-/// The snack-bar shown when [ResultShareService.shareText] throws. Never
-/// exposes the underlying error — sharing failure is not a debugging
-/// concern for the player.
-const String _shareFailureMessage =
-    "Couldn't share your result. Please try again.";
+/// Builds share captions for a completed game's share card. Stateless and
+/// pure, so a single module-level instance is reused for every share request
+/// rather than constructed per call.
+const ShareCaptionFormatter _captionFormatter = ShareCaptionFormatter();
 
 /// Maps a [GuessValidationFailure] to concise, human-facing text.
 ///
@@ -94,12 +79,12 @@ class GameScreen extends StatefulWidget {
     required this.controller,
     required this.config,
     this.onButtonTap,
-    this.shareService = const SharePlusResultShareService(),
+    this.shareCardRenderer = const OffscreenShareCardRenderer(),
+    this.shareCardService = const SharePlusShareCardService(),
     this.streakFeedback,
     this.coinsEarnedFeedback,
-    this.currentStreak,
-    this.resultTextBuilder,
     this.dailyChallengeReplayFeedback,
+    this.dailyChallengeShareData,
   });
 
   /// The controller for this game flow. Owned by this screen.
@@ -109,16 +94,21 @@ class GameScreen extends StatefulWidget {
   final GameConfig config;
 
   /// Called for this screen's own important navigation actions (Restart,
-  /// Return Home, Share Result) so the caller can play a button-activation
-  /// sound, or `null` to play none. Deliberately generic — this screen never
-  /// imports anything audio/haptic-related itself; the app-level composition
-  /// root supplies the real behavior (see `app.dart`).
+  /// Return Home, Share Win/Challenge) so the caller can play a
+  /// button-activation sound, or `null` to play none. Deliberately generic —
+  /// this screen never imports anything audio/haptic-related itself; the
+  /// app-level composition root supplies the real behavior (see `app.dart`).
   final VoidCallback? onButtonTap;
 
-  /// Opens the system share sheet for a completed game's result. Defaults to
-  /// the real, `share_plus`-backed implementation; tests substitute a fake so
-  /// no platform channel is ever touched.
-  final ResultShareService shareService;
+  /// Renders a share card to PNG bytes. Defaults to the real, offscreen
+  /// `RepaintBoundary`-backed implementation; tests substitute a fake so no
+  /// real widget-tree capture is ever driven.
+  final ShareCardRenderer shareCardRenderer;
+
+  /// Hands a rendered share card to the system share sheet. Defaults to the
+  /// real, `share_plus`-backed implementation; tests substitute a fake so no
+  /// platform channel is ever touched.
+  final ShareCardService shareCardService;
 
   /// Set exactly once, synchronously, by the app-level composition root at
   /// the moment this game's completion is recorded (see
@@ -143,17 +133,6 @@ class GameScreen extends StatefulWidget {
   /// coin rewards are unaffected.
   final ValueNotifier<CoinRewardBreakdown?>? coinsEarnedFeedback;
 
-  /// The player's current streak length, included in the *default*
-  /// Share/Copy text (see [_resultFormatter]) when positive. Ignored
-  /// whenever [resultTextBuilder] is supplied, since that builder owns the
-  /// entire share text itself. `null` (the default) omits the streak line
-  /// entirely, exactly matching this screen's original share/copy behavior.
-  final int? currentStreak;
-
-  /// Overrides how the completed view's Share/Copy text is built. See
-  /// [ResultTextBuilder]'s own doc for why this exists.
-  final ResultTextBuilder? resultTextBuilder;
-
   /// Set exactly once, synchronously, by the app-level composition root at
   /// the same moment as [streakFeedback] — but only for a Daily Challenge
   /// session — to whether this specific completion was a practice replay
@@ -162,8 +141,26 @@ class GameScreen extends StatefulWidget {
   /// When the completed view renders `true`, it shows an explicit "replay —
   /// no additional coins" notice, so a Daily Challenge replay is never
   /// ambiguous with an official loss (both otherwise show no coin-reward
-  /// card, but only a replay should say so).
+  /// card, but only a replay should say so). Also doubles as this screen's
+  /// "is this a Daily Challenge session at all" signal (non-`null` exactly
+  /// for a Daily Challenge session): the completed view shows "Share Win"
+  /// for a normal game, or "Share Challenge" for a Daily Challenge session —
+  /// never both, and never falls back from one to the other.
   final ValueNotifier<bool?>? dailyChallengeReplayFeedback;
+
+  /// The official Daily Challenge result's share-card data, or `null`.
+  ///
+  /// Set by the app-level composition root only when
+  /// [dailyChallengeReplayFeedback] is non-null (a Daily Challenge session)
+  /// *and* the official (first-of-the-day) result is a win — a `null` here
+  /// on an otherwise-Daily-Challenge screen means the official result is a
+  /// loss (or not yet recorded), so Share Challenge is never shown, even if
+  /// this specific completed view is itself a replay win. Always built from
+  /// the saved official result, never a live/replayed session, so a replay
+  /// after an official win still shares the exact same card (see the
+  /// milestone's own "a replay must still use the saved official winning
+  /// result" rule).
+  final DailyChallengeShareData? dailyChallengeShareData;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -188,10 +185,11 @@ class _GameScreenState extends State<GameScreen> {
   /// pattern [_submitting] already uses for guess submission.
   bool _hintBusy = false;
 
-  /// Set the instant a share request begins and cleared once it settles.
-  /// Guards against a rapid double-tap on Share Result opening two
-  /// overlapping share sheets, the same pattern [_hintBusy] uses for hints.
-  bool _sharing = false;
+  /// Set the instant a Share Win/Challenge tap begins opening the share-card
+  /// preview sheet, and cleared once that sheet closes. Guards against a
+  /// rapid double-tap opening two overlapping preview sheets, the same
+  /// pattern [_hintBusy] uses for hints.
+  bool _openingShare = false;
 
   /// Set the instant a leave/restart confirmation dialog begins and cleared
   /// once it settles. Guards against a rapid double-tap on the Restart
@@ -367,62 +365,73 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
-  /// Shares [state]'s result text via [GameScreen.shareService].
+  /// Opens the share-card preview sheet for [card], which renders once and
+  /// shares [fileName]/[caption] if the player confirms.
   ///
-  /// `_sharing` is set synchronously, before the `await`, so a rapid
-  /// double-tap on Share Result cannot open two overlapping share sheets
-  /// (see [_sharing]'s doc comment). A thrown failure shows a friendly snack
-  /// bar and otherwise leaves the completed game, statistics, coins, and
-  /// navigation entirely untouched — this method never mutates
-  /// [GameScreen.controller]. No success message is shown merely because the
-  /// share sheet opened: this app cannot reliably know whether the player
-  /// actually completed sharing, only that the sheet was handed off or
-  /// dismissed, both of which are treated as the normal case.
-  Future<void> _handleShare(GameCompleted state, int hintsUsed) async {
-    if (_sharing) return;
-    widget.onButtonTap?.call();
-    setState(() => _sharing = true);
+  /// `_openingShare` is set synchronously, before the `await`, so a rapid
+  /// double-tap on Share Win/Challenge cannot open two overlapping preview
+  /// sheets (see [_openingShare]'s doc comment). Never mutates
+  /// [GameScreen.controller] or any completed-game/statistics/coin/streak
+  /// state — a card preview, its render, and its share are purely additive,
+  /// read-only operations.
+  Future<void> _openSharePreview({
+    required Widget card,
+    required String fileName,
+    required String caption,
+  }) async {
+    if (_openingShare) return;
+    setState(() => _openingShare = true);
     try {
-      final text = _buildResultText(state, hintsUsed);
-      await widget.shareService.shareText(
-        text: text,
-        subject: 'My Cow Bull Quest result',
+      await showShareCardPreview(
+        context: context,
+        card: card,
+        fileName: fileName,
+        caption: caption,
+        renderer: widget.shareCardRenderer,
+        service: widget.shareCardService,
+        onButtonTap: widget.onButtonTap,
       );
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text(_shareFailureMessage)));
-      }
     } finally {
-      if (mounted) setState(() => _sharing = false);
+      if (mounted) setState(() => _openingShare = false);
     }
   }
 
-  /// Copies [state]'s result text to the clipboard via Flutter's built-in
-  /// [Clipboard] API — no additional package — and shows a brief
-  /// confirmation. Shares the exact same privacy-safe text [_handleShare]
-  /// sends to the system share sheet.
-  void _handleCopy(GameCompleted state, int hintsUsed) {
-    final text = _buildResultText(state, hintsUsed);
-    unawaited(Clipboard.setData(ClipboardData(text: text)));
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Result copied.')));
-  }
-
-  /// Builds the Share/Copy text for [state]: [GameScreen.resultTextBuilder]
-  /// when supplied, otherwise the default [_resultFormatter] call using this
-  /// screen's own live session/difficulty/hints and
-  /// [GameScreen.currentStreak].
-  String _buildResultText(GameCompleted state, int hintsUsed) {
-    final builder = widget.resultTextBuilder;
-    if (builder != null) return builder(state, hintsUsed);
-    return _resultFormatter.format(
-      session: state.session,
-      difficulty: widget.config.difficulty,
+  /// The Share Win/Challenge tap handler for [state]'s completed view, or
+  /// `null` to show no share action at all.
+  ///
+  /// A Daily Challenge session ([GameScreen.dailyChallengeReplayFeedback]
+  /// non-`null`) always shares [GameScreen.dailyChallengeShareData] — the
+  /// saved *official* result — when it is non-`null` (an official win),
+  /// regardless of whether this specific completed view is itself a replay
+  /// win or loss; `null` there (an official loss, or not yet recorded) means
+  /// no share action, ever, for that Daily Challenge session. A normal game
+  /// only offers a share action for its own live win — never for a loss.
+  VoidCallback? _shareHandlerFor(GameCompleted state, int hintsUsed) {
+    if (widget.dailyChallengeReplayFeedback != null) {
+      final data = widget.dailyChallengeShareData;
+      if (data == null) return null;
+      return () => unawaited(
+        _openSharePreview(
+          card: DailyChallengeShareCard(data: data),
+          fileName: 'cow-bull-quest-daily-challenge.png',
+          caption: _captionFormatter.dailyChallengeWin(data),
+        ),
+      );
+    }
+    if (state.session.status != GameStatus.won) return null;
+    final data = NormalWinShareData(
+      difficultyLabel: _difficultyLabel(widget.config.difficulty),
+      attemptsUsed: state.session.attemptsUsed,
+      maxAttempts: state.session.maxAttempts,
       hintsUsed: hintsUsed,
-      currentStreak: widget.currentStreak,
+      coinsEarned: widget.coinsEarnedFeedback?.value?.totalCoinsEarned ?? 0,
+    );
+    return () => unawaited(
+      _openSharePreview(
+        card: NormalWinShareCard(data: data),
+        fileName: 'cow-bull-quest-win.png',
+        caption: _captionFormatter.normalWin(data),
+      ),
     );
   }
 
@@ -500,16 +509,15 @@ class _GameScreenState extends State<GameScreen> {
       GameCompleted() => _CompletedGameView(
         state: state,
         hintsUsed: widget.controller.hintsUsedThisGame,
-        sharing: _sharing,
+        sharingBusy: _openingShare,
         streakFeedback: widget.streakFeedback?.value,
         coinsEarned: widget.coinsEarnedFeedback?.value,
         isDailyChallengeReplay: widget.dailyChallengeReplayFeedback?.value,
+        isDailyChallenge: widget.dailyChallengeReplayFeedback != null,
         difficulty: widget.config.difficulty,
         onRestart: _handleRestart,
         onReturnHome: _handleReturnHome,
-        onShare: () =>
-            unawaited(_handleShare(state, widget.controller.hintsUsedThisGame)),
-        onCopy: () => _handleCopy(state, widget.controller.hintsUsedThisGame),
+        onShare: _shareHandlerFor(state, widget.controller.hintsUsedThisGame),
       ),
       GameStartupFailure() => _StartupFailureView(
         onRetry: _handleRetry,
@@ -719,15 +727,15 @@ class _CompletedGameView extends StatelessWidget {
   const _CompletedGameView({
     required this.state,
     required this.hintsUsed,
-    required this.sharing,
+    required this.sharingBusy,
     this.streakFeedback,
     this.coinsEarned,
     this.isDailyChallengeReplay,
+    required this.isDailyChallenge,
     required this.difficulty,
     required this.onRestart,
     required this.onReturnHome,
     required this.onShare,
-    required this.onCopy,
   });
 
   final GameCompleted state;
@@ -735,9 +743,10 @@ class _CompletedGameView extends StatelessWidget {
   /// The number of hints used in the game that just ended.
   final int hintsUsed;
 
-  /// Whether a share request is currently in flight — disables Share Result
-  /// so a rapid double-tap cannot open two overlapping share sheets.
-  final bool sharing;
+  /// Whether the share-card preview sheet is currently being opened —
+  /// disables Share Win/Challenge so a rapid double-tap cannot open two
+  /// overlapping preview sheets.
+  final bool sharingBusy;
 
   /// What happened to the streak as a result of this completion, or `null`
   /// to show no streak feedback at all. See [GameScreen.streakFeedback].
@@ -751,13 +760,22 @@ class _CompletedGameView extends StatelessWidget {
   /// for every normal game. See [GameScreen.dailyChallengeReplayFeedback].
   final bool? isDailyChallengeReplay;
 
+  /// Whether this completed view belongs to a Daily Challenge session at
+  /// all — distinct from [isDailyChallengeReplay], which is only about
+  /// *this specific* completion. Picks the share button's label: "Share
+  /// Challenge" here, "Share Win" otherwise.
+  final bool isDailyChallenge;
+
   /// The difficulty this game was played at, labeling
   /// [coinsEarned]'s base-win-reward line (e.g. "Medium win").
   final GameDifficulty difficulty;
   final VoidCallback onRestart;
   final VoidCallback onReturnHome;
-  final VoidCallback onShare;
-  final VoidCallback onCopy;
+
+  /// Opens the share-card preview sheet, or `null` to show no share action
+  /// at all — see [GameScreen._shareHandlerFor]'s own doc for exactly when
+  /// each case applies.
+  final VoidCallback? onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -775,11 +793,11 @@ class _CompletedGameView extends StatelessWidget {
     // plain Column relying on Expanded(GuessHistory) alone to absorb any
     // excess — so this whole screen degrades to scrolling instead of a hard
     // RenderFlex overflow whenever its fixed content (the outcome card, plus
-    // the action rows below it — now three deep since Milestone 17 added
-    // Share Result/Copy Result) exceeds the available height on its own
-    // (narrow viewports, large text-scale factors). GuessHistory is passed
-    // shrinkWrap: true so it sizes to its content within this single outer
-    // scrollable, rather than nesting a second, independently-scrolling one.
+    // the action rows below it, including the Share Win/Challenge action)
+    // exceeds the available height on its own (narrow viewports, large
+    // text-scale factors). GuessHistory is passed shrinkWrap: true so it
+    // sizes to its content within this single outer scrollable, rather than
+    // nesting a second, independently-scrolling one.
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         child: ConstrainedBox(
@@ -890,34 +908,28 @@ class _CompletedGameView extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: AppSpacing.md),
-              Row(
-                children: [
-                  Expanded(
+              if (onShare != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                Semantics(
+                  button: true,
+                  label: isDailyChallenge ? 'Share challenge' : 'Share win',
+                  child: ExcludeSemantics(
                     child: OutlinedButton.icon(
-                      onPressed: sharing ? null : onShare,
-                      icon: sharing
+                      onPressed: sharingBusy ? null : onShare,
+                      icon: sharingBusy
                           ? const SizedBox(
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(Icons.share),
-                      label: const Text('Share Result'),
+                          : const Icon(Icons.image),
+                      label: Text(
+                        isDailyChallenge ? 'Share Challenge' : 'Share Win',
+                      ),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Semantics(
-                    button: true,
-                    label: 'Copy Result',
-                    child: IconButton.outlined(
-                      onPressed: onCopy,
-                      icon: const Icon(Icons.copy),
-                      tooltip: 'Copy Result',
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ],
           ),
         ),

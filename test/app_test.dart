@@ -6,12 +6,14 @@ import 'package:cowbullgame/core/time/local_date.dart';
 import 'package:cowbullgame/features/game/data/asset_word_repository.dart';
 import 'package:cowbullgame/features/game/data/word_repository.dart';
 import 'package:cowbullgame/features/game/models/game_difficulty.dart';
+import 'package:cowbullgame/widgets/share_cards/daily_challenge_share_card.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_local_date_provider.dart';
 import 'support/fake_preferences_store.dart';
+import 'support/fake_share_card_renderer.dart';
+import 'support/fake_share_card_service.dart';
 import 'support/fake_statistics_repository.dart';
 
 /// A minimal [WordRepository] fake so app-level navigation can be exercised
@@ -88,6 +90,19 @@ Future<void> _backgroundAndResume(WidgetTester tester) async {
   ]) {
     tester.binding.handleAppLifecycleStateChanged(state);
     await tester.pump();
+  }
+}
+
+/// Pumps enough frames for the share-card preview sheet to finish opening
+/// and its (fake, near-instant) render to complete.
+///
+/// Deliberately not `pumpAndSettle`: the completed screen's own Share Win/
+/// Challenge button shows an indeterminate spinner for as long as the
+/// preview sheet stays open, which `pumpAndSettle` can never treat as
+/// "settled".
+Future<void> pumpForPreviewToOpen(WidgetTester tester) async {
+  for (var i = 0; i < 6; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
   }
 }
 
@@ -1409,14 +1424,15 @@ void main() {
     });
 
     testWidgets(
-      'sharing the Daily Challenge result contains the date, aggregate '
-      'bulls/cows, and never the secret word — even after a practice replay',
+      'sharing the Daily Challenge result shares a DailyChallengeShareCard '
+      'with the official date, and never the secret word — even after a '
+      'practice replay',
       (tester) async {
         // A tall viewport: the completed view's content (outcome card, the
         // Milestone 20 Daily Challenge replay notice on the second win,
-        // guess history, and two full button rows) no longer fits
-        // comfortably in the default 800x600 test surface without the Copy
-        // button landing flush against the bottom edge, where a `tap()`
+        // guess history, and the Share Challenge action) no longer fits
+        // comfortably in the default 800x600 test surface without the
+        // action landing flush against the bottom edge, where a `tap()`
         // computed at its exact center can miss it entirely.
         tester.view.physicalSize = const Size(800, 1400);
         tester.view.devicePixelRatio = 1.0;
@@ -1428,27 +1444,15 @@ void main() {
           ..secretWordsByLengthAndDifficulty[(4, GameDifficulty.common)] = [
             'lace',
           ];
-        final clipboardCalls = <Map<Object?, Object?>>[];
-        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.platform,
-          (call) async {
-            if (call.method == 'Clipboard.setData') {
-              clipboardCalls.add(call.arguments as Map<Object?, Object?>);
-            }
-            return null;
-          },
-        );
-        addTearDown(
-          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-            SystemChannels.platform,
-            null,
-          ),
-        );
+        final renderer = FakeShareCardRenderer();
+        final service = FakeShareCardService();
 
         await tester.pumpWidget(
           CowBullApp(
             wordRepository: repo,
             clock: FakeLocalDateProvider(today()),
+            shareCardRenderer: renderer,
+            shareCardService: service,
           ),
         );
         await tester.pumpAndSettle();
@@ -1458,17 +1462,20 @@ void main() {
         await tester.pumpAndSettle();
         await enterAndSubmit(tester, 'lace');
 
-        await tester.ensureVisible(find.byIcon(Icons.copy));
-        await tester.tap(find.byIcon(Icons.copy));
-        await tester.pump();
+        await tester.ensureVisible(find.text('Share Challenge'));
+        await tester.tap(find.text('Share Challenge'));
+        await pumpForPreviewToOpen(tester);
+        await tester.tap(find.text('Share'));
+        await tester.pumpAndSettle();
 
-        expect(clipboardCalls, hasLength(1));
-        final officialText = clipboardCalls.single['text'] as String;
-        expect(officialText, contains('Cow Bull Quest — Daily Challenge'));
-        expect(officialText, contains('18 July 2026'));
-        expect(officialText, contains('🟩'));
-        expect(officialText, contains('🟨'));
-        expect(officialText.toLowerCase(), isNot(contains('lace')));
+        expect(renderer.renderedCards, hasLength(1));
+        final officialCard =
+            renderer.renderedCards.single as DailyChallengeShareCard;
+        expect(officialCard.data.dateLabel, '18 JULY 2026');
+        expect(officialCard.data.attemptsUsed, 1);
+        expect(service.calls, hasLength(1));
+        final officialCaption = service.calls.single.caption;
+        expect(officialCaption.toLowerCase(), isNot(contains('lace')));
 
         // A practice replay wins in fewer attempts (immediately), but
         // sharing must still reflect the official first completion above,
@@ -1478,12 +1485,18 @@ void main() {
         await tester.pumpAndSettle();
         await enterAndSubmit(tester, 'lace');
 
-        await tester.ensureVisible(find.byIcon(Icons.copy));
-        await tester.tap(find.byIcon(Icons.copy));
-        await tester.pump();
+        await tester.ensureVisible(find.text('Share Challenge'));
+        await tester.tap(find.text('Share Challenge'));
+        await pumpForPreviewToOpen(tester);
+        await tester.tap(find.text('Share'));
+        await tester.pumpAndSettle();
 
-        expect(clipboardCalls, hasLength(2));
-        expect(clipboardCalls[1]['text'], officialText);
+        expect(renderer.renderedCards, hasLength(2));
+        final replayCard =
+            renderer.renderedCards.last as DailyChallengeShareCard;
+        expect(replayCard.data, officialCard.data);
+        expect(service.calls, hasLength(2));
+        expect(service.calls.last.caption, officialCaption);
       },
     );
   });

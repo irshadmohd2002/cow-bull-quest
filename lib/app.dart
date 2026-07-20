@@ -11,13 +11,12 @@ import 'core/audio/audioplayers_audio_service.dart';
 import 'core/haptics/platform_haptic_service.dart';
 import 'core/persistence/shared_preferences_store.dart';
 import 'core/privacy_policy.dart' as privacy_policy_config;
-import 'core/sharing/result_share_service.dart';
-import 'core/sharing/share_plus_result_share_service.dart';
+import 'core/sharing/share_card_renderer.dart';
+import 'core/sharing/share_card_service.dart';
 import 'core/time/local_date.dart';
 import 'core/time/local_date_provider.dart';
 import 'features/daily_challenge/controllers/daily_challenge_controller.dart';
 import 'features/daily_challenge/models/daily_challenge_result.dart';
-import 'features/daily_challenge/services/daily_challenge_result_share_formatter.dart';
 import 'features/daily_challenge/services/daily_challenge_service.dart';
 import 'features/game/controllers/game_controller.dart';
 import 'features/game/data/asset_word_repository.dart';
@@ -45,6 +44,7 @@ import 'features/statistics/models/game_outcome.dart';
 import 'features/statistics/presentation/statistics_screen.dart';
 import 'features/streak/controllers/streak_controller.dart';
 import 'features/streak/models/streak_update_result.dart';
+import 'models/daily_challenge_share_data.dart';
 import 'models/difficulty_selection.dart';
 import 'models/streak_feedback.dart';
 import 'theme/app_theme.dart';
@@ -129,6 +129,8 @@ class CowBullApp extends StatefulWidget {
     LocalDateProvider? clock,
     String? privacyPolicyUrl,
     UrlLauncher? urlLauncher,
+    ShareCardRenderer? shareCardRenderer,
+    ShareCardService? shareCardService,
   }) : wordRepository = wordRepository ?? AssetWordRepository(),
        statisticsRepository =
            statisticsRepository ??
@@ -136,9 +138,24 @@ class CowBullApp extends StatefulWidget {
        clock = clock ?? const SystemLocalDateProvider(),
        privacyPolicyUrl =
            privacyPolicyUrl ?? privacy_policy_config.privacyPolicyUrl,
-       urlLauncher = urlLauncher ?? _launchUrlExternally;
+       urlLauncher = urlLauncher ?? _launchUrlExternally,
+       shareCardRenderer =
+           shareCardRenderer ?? const OffscreenShareCardRenderer(),
+       shareCardService = shareCardService ?? const SharePlusShareCardService();
 
   final WordRepository wordRepository;
+
+  /// Renders a share card to PNG bytes. Defaults to the real, offscreen
+  /// `RepaintBoundary`-backed implementation; tests substitute a fake so no
+  /// real widget-tree capture is ever driven, mirroring [wordRepository]'s
+  /// own test-seam pattern.
+  final ShareCardRenderer shareCardRenderer;
+
+  /// Hands a rendered share card to the system share sheet. Defaults to the
+  /// real, `share_plus`-backed implementation; tests substitute a fake so no
+  /// platform channel is ever touched, mirroring [wordRepository]'s own
+  /// test-seam pattern.
+  final ShareCardService shareCardService;
 
   /// An externally-owned, persistence-capable settings controller, or
   /// `null` to let this widget create its own **non-persistent, in-memory
@@ -243,26 +260,15 @@ class CowBullApp extends StatefulWidget {
 class _CowBullAppState extends State<CowBullApp> {
   static const GameEngine _gameEngine = GameEngine();
 
-  /// Opens the system share sheet for a completed game's result. Stateless
-  /// and holds no resources (unlike [_audioFeedback]), so a single `const`
-  /// instance is shared across every [GameScreen] this state creates rather
-  /// than owned per-game.
-  static const ResultShareService _shareService = SharePlusResultShareService();
-
   /// Deterministically selects the Daily Challenge secret word. Stateless
   /// and pure, so a single `const` instance is reused for every Daily
   /// Challenge start rather than constructed per call.
   static const DailyChallengeService _dailyChallengeService =
       DailyChallengeService();
 
-  /// Formats an official Daily Challenge result into shareable text.
-  /// Stateless and pure, mirroring [_shareService]'s reuse pattern.
-  static const DailyChallengeResultShareFormatter
-  _dailyChallengeShareFormatter = DailyChallengeResultShareFormatter();
-
   /// Computes Milestone 19's coin reward for a finished game or Daily
-  /// Challenge attempt. Stateless and pure, mirroring [_shareService]'s
-  /// reuse pattern.
+  /// Challenge attempt. Stateless and pure, mirroring
+  /// [CowBullApp.shareCardRenderer]'s reuse pattern.
   static const CoinRewardCalculator _coinRewardCalculator =
       CoinRewardCalculator();
 
@@ -485,22 +491,14 @@ class _CowBullAppState extends State<CowBullApp> {
     unawaited(
       _pushOnce(
         context,
-        // Wrapped in a ListenableBuilder over _streakController (rather than
-        // reading its state once, here, before the game even starts) so
-        // GameScreen.currentStreak — used only by its *default* Share/Copy
-        // text — reflects the streak as of this game's own completion, not
-        // whatever it was the moment the player tapped Start Game.
-        (_) => ListenableBuilder(
-          listenable: _streakController,
-          builder: (context, _) => GameScreen(
-            config: config,
-            controller: controller,
-            onButtonTap: _audioFeedback.playButtonTap,
-            shareService: _shareService,
-            streakFeedback: streakFeedback,
-            coinsEarnedFeedback: coinsEarnedFeedback,
-            currentStreak: _streakController.state.currentStreak,
-          ),
+        (_) => GameScreen(
+          config: config,
+          controller: controller,
+          onButtonTap: _audioFeedback.playButtonTap,
+          shareCardRenderer: widget.shareCardRenderer,
+          shareCardService: widget.shareCardService,
+          streakFeedback: streakFeedback,
+          coinsEarnedFeedback: coinsEarnedFeedback,
         ),
       ),
     );
@@ -578,12 +576,12 @@ class _CowBullAppState extends State<CowBullApp> {
             config: config,
             controller: controller,
             onButtonTap: _audioFeedback.playButtonTap,
-            shareService: _shareService,
+            shareCardRenderer: widget.shareCardRenderer,
+            shareCardService: widget.shareCardService,
             streakFeedback: streakFeedback,
             coinsEarnedFeedback: coinsEarnedFeedback,
             dailyChallengeReplayFeedback: dailyChallengeReplayFeedback,
-            resultTextBuilder: (state, hintsUsed) =>
-                _formatDailyChallengeShareText(),
+            dailyChallengeShareData: _dailyChallengeShareData(),
           ),
         ),
       ),
@@ -812,25 +810,40 @@ class _CowBullAppState extends State<CowBullApp> {
     currentStreak: result.state.currentStreak,
   );
 
-  /// Builds the Share/Copy text for a Daily Challenge's completed view,
-  /// always from [DailyChallengeController.officialResultToday] — the
-  /// official, first-completion result — never from a live (possibly
-  /// replayed) session, satisfying "a replay must still share the official
-  /// result". `officialResultToday` is guaranteed non-null by the time this
-  /// can run: [GameScreen] only reaches its completed view, where Share/Copy
-  /// become reachable at all, after `onGameCompleted` has already
-  /// synchronously called [_recordDailyChallengeCompletion] (which itself
-  /// calls `recordIfFirst` synchronously in-memory) for this exact
-  /// completion or an earlier one today.
-  String _formatDailyChallengeShareText() {
+  /// Builds the Daily Challenge share card's display data, always from
+  /// [DailyChallengeController.officialResultToday] — the official,
+  /// first-completion result — never from a live (possibly replayed)
+  /// session, satisfying "a replay must still share the official result".
+  /// `null` whenever there is no official result yet, or it was a loss: see
+  /// [GameScreen.dailyChallengeShareData]'s own doc for exactly how that
+  /// gates the Share Challenge action.
+  ///
+  /// Coins are recomputed via [_coinRewardCalculator] — pure and
+  /// deterministic for a known official win and hint count — rather than
+  /// read from a persisted field, so no new field is needed on
+  /// [DailyChallengeResult] just to redisplay a value that already follows
+  /// directly from data it already stores. [DailyChallengeShareData.currentStreak]
+  /// is deliberately the *current* persisted streak, not a historical
+  /// snapshot of the streak as it stood the moment the official result
+  /// completed — see [DailyChallengeShareData]'s own class-level doc for why
+  /// that is an acceptable, documented simplification (this app persists no
+  /// per-day streak history to reconstruct from).
+  DailyChallengeShareData? _dailyChallengeShareData() {
     final official = _dailyChallengeController.officialResultToday;
-    if (official == null) {
-      // Defensive fallback only; not reachable in normal operation (see the
-      // doc above).
-      return 'Cow Bull Quest — Daily Challenge';
-    }
-    return _dailyChallengeShareFormatter.format(
-      result: official,
+    if (official == null || !official.won) return null;
+    final coinsEarned = _coinRewardCalculator
+        .rewardForDailyChallenge(
+          won: true,
+          isOfficial: true,
+          hintsUsed: official.hintsUsed,
+        )
+        .totalCoinsEarned;
+    return DailyChallengeShareData(
+      dateLabel: _formatDate(official.date).toUpperCase(),
+      attemptsUsed: official.attemptsUsed,
+      maxAttempts: official.maxAttempts,
+      hintsUsed: official.hintsUsed,
+      coinsEarned: coinsEarned,
       currentStreak: _streakController.state.currentStreak,
     );
   }
@@ -999,6 +1012,8 @@ class _CowBullAppState extends State<CowBullApp> {
             totalCoinsSpent: _coinWallet.totalCoinsSpent,
             dailyChallengesCompleted: _dailyChallengeController.completedCount,
             dailyChallengesWon: _dailyChallengeController.wonCount,
+            shareCardRenderer: widget.shareCardRenderer,
+            shareCardService: widget.shareCardService,
           ),
         ),
       ),
@@ -1040,6 +1055,8 @@ class _CowBullAppState extends State<CowBullApp> {
                     ),
                     onDifficultySelected: (_) =>
                         _audioFeedback.onDifficultySelected(),
+                    shareCardRenderer: widget.shareCardRenderer,
+                    shareCardService: widget.shareCardService,
                   )
                 // Shown only while onboarding has not yet been completed or
                 // skipped — the very first frame a fresh install (or an
