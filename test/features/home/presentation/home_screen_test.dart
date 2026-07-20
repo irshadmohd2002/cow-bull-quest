@@ -23,8 +23,10 @@ void main() {
     ValueChanged<DifficultyOption>? onDifficultySelected,
     FakeShareCardRenderer? shareCardRenderer,
     FakeShareCardService? shareCardService,
+    ThemeData? theme,
   }) {
     return MaterialApp(
+      theme: theme,
       home: HomeScreen(
         onStartGame: onStartGame,
         onOpenRules: onOpenRules ?? () {},
@@ -64,6 +66,29 @@ void main() {
     await tester.pumpWidget(buildSubject((_) {}));
     expect(find.textContaining('bull'), findsWidgets);
     expect(find.textContaining('cow'), findsWidgets);
+  });
+
+  testWidgets('shows a short, concise gameplay explanation', (tester) async {
+    await tester.pumpWidget(buildSubject((_) {}));
+    expect(
+      find.textContaining('Guess the hidden 4-letter word'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('no longer shows the old, longer explanatory paragraph', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildSubject((_) {}));
+    expect(
+      find.textContaining('Each guess earns a bull for every letter'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('shows the shortened branding subtitle', (tester) async {
+    await tester.pumpWidget(buildSubject((_) {}));
+    expect(find.text('A quick game of bulls and cows.'), findsOneWidget);
   });
 
   testWidgets('does not show a word-length selector', (tester) async {
@@ -171,6 +196,142 @@ void main() {
     expect(callCount, 1);
   });
 
+  group('persistent Start Game action', () {
+    testWidgets('only one Start Game action exists on the screen', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject((_) {}));
+      expect(find.text('Start Game'), findsOneWidget);
+    });
+
+    testWidgets('is placed in the Scaffold bottom action area', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}));
+
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffold.bottomNavigationBar, isNotNull);
+      expect(scaffold.floatingActionButton, isNull);
+      expect(
+        find.descendant(
+          of: find.byWidget(scaffold.bottomNavigationBar!),
+          matching: find.widgetWithText(FilledButton, 'Start Game'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('is visible without scrolling at a typical phone size', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(360, 740));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(buildSubject((_) {}));
+      await tester.pumpAndSettle();
+
+      final rect = tester.getRect(
+        find.widgetWithText(FilledButton, 'Start Game'),
+      );
+      expect(rect.bottom, lessThanOrEqualTo(740));
+      expect(rect.top, greaterThanOrEqualTo(0));
+    });
+
+    testWidgets('remains visible after scrolling the upper content', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(360, 740));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(buildSubject((_) {}));
+      await tester.pumpAndSettle();
+
+      await tester.drag(
+        find.byType(SingleChildScrollView),
+        const Offset(0, -400),
+      );
+      await tester.pumpAndSettle();
+
+      final rect = tester.getRect(
+        find.widgetWithText(FilledButton, 'Start Game'),
+      );
+      expect(find.widgetWithText(FilledButton, 'Start Game'), findsOneWidget);
+      expect(rect.bottom, lessThanOrEqualTo(740));
+    });
+
+    testWidgets(
+      'scroll content is not covered by the fixed bottom action area',
+      (tester) async {
+        await tester.pumpWidget(buildSubject((_) {}));
+        await tester.pumpAndSettle();
+
+        // Scroll the last scrollable item into view first - it may start
+        // out laid out below the (unclipped) viewport.
+        await tester.ensureVisible(find.text('Statistics'));
+        await tester.pumpAndSettle();
+
+        final statisticsBottom = tester.getRect(find.text('Statistics')).bottom;
+        final startGameTop = tester
+            .getRect(find.widgetWithText(FilledButton, 'Start Game'))
+            .top;
+        expect(statisticsBottom, lessThanOrEqualTo(startGameTop));
+      },
+    );
+
+    testWidgets('adds extra bottom inset when the safe area requires it', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(360, 740));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(buildSubject((_) {}));
+      await tester.pumpAndSettle();
+      final gapWithoutInset =
+          740 -
+          tester
+              .getRect(find.widgetWithText(FilledButton, 'Start Game'))
+              .bottom;
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(padding: EdgeInsets.only(bottom: 34)),
+          child: buildSubject((_) {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final gapWithInset =
+          740 -
+          tester
+              .getRect(find.widgetWithText(FilledButton, 'Start Game'))
+              .bottom;
+
+      expect(gapWithInset, greaterThan(gapWithoutInset));
+    });
+
+    testWidgets('rapid taps invoke onStartGame only once', (tester) async {
+      var callCount = 0;
+      await tester.pumpWidget(buildSubject((_) => callCount++));
+
+      await tester.tap(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.tap(find.text('Start Game'));
+      await tester.pumpAndSettle();
+
+      expect(callCount, 1);
+    });
+
+    testWidgets('does not overflow in a landscape aspect ratio', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(740, 360));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(buildSubject((_) {}));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.widgetWithText(FilledButton, 'Start Game'), findsOneWidget);
+    });
+  });
+
   group('HomeScreen difficulty selection', () {
     testWidgets('shows Easy, Medium, and Hard options', (tester) async {
       await tester.pumpWidget(buildSubject((_) {}));
@@ -184,14 +345,88 @@ void main() {
       expect(find.text('Common'), findsNothing);
     });
 
-    testWidgets('shows a concise description for each difficulty', (
-      tester,
-    ) async {
+    testWidgets(
+      'shows only the selected difficulty description, not the other two',
+      (tester) async {
+        await tester.pumpWidget(buildSubject((_) {}));
+
+        // Medium is selected by default.
+        expect(
+          find.textContaining('Balanced everyday vocabulary'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Familiar, common words'), findsNothing);
+        expect(find.textContaining('Less common, trickier'), findsNothing);
+      },
+    );
+
+    testWidgets('tapping Easy shows the Easy description', (tester) async {
       await tester.pumpWidget(buildSubject((_) {}));
-      expect(find.textContaining('high-frequency'), findsOneWidget);
-      expect(find.textContaining('everyday vocabulary'), findsOneWidget);
-      expect(find.textContaining('trickier'), findsOneWidget);
+
+      await tester.tap(find.text('Easy'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Familiar, common words'), findsOneWidget);
+      expect(find.textContaining('Balanced everyday vocabulary'), findsNothing);
+      expect(find.textContaining('Less common, trickier'), findsNothing);
     });
+
+    testWidgets('tapping Medium shows the Medium description', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}));
+
+      await tester.tap(find.text('Hard'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Medium'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Balanced everyday vocabulary'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Familiar, common words'), findsNothing);
+      expect(find.textContaining('Less common, trickier'), findsNothing);
+    });
+
+    testWidgets('tapping Hard shows the Hard description', (tester) async {
+      await tester.pumpWidget(buildSubject((_) {}));
+
+      await tester.tap(find.text('Hard'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Less common, trickier'), findsOneWidget);
+      expect(find.textContaining('Familiar, common words'), findsNothing);
+      expect(find.textContaining('Balanced everyday vocabulary'), findsNothing);
+    });
+
+    testWidgets(
+      'the selected difficulty has a semantic selected state distinct from '
+      'the unselected ones',
+      (tester) async {
+        final semanticsHandle = tester.ensureSemantics();
+        await tester.pumpWidget(buildSubject((_) {}));
+
+        expect(
+          tester
+              .getSemantics(find.text('Medium'))
+              .getSemanticsData()
+              .flagsCollection
+              .isSelected
+              .toBoolOrNull(),
+          isTrue,
+        );
+        expect(
+          tester
+              .getSemantics(find.text('Easy'))
+              .getSemanticsData()
+              .flagsCollection
+              .isSelected
+              .toBoolOrNull(),
+          isNot(isTrue),
+        );
+
+        semanticsHandle.dispose();
+      },
+    );
 
     testWidgets('defaults to Medium selected', (tester) async {
       await tester.pumpWidget(buildSubject((_) {}));
@@ -300,6 +535,55 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+  });
+
+  group('compact layout', () {
+    testWidgets(
+      'does not overflow at a typical Android phone size (Light theme)',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(393, 851));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        await tester.pumpWidget(buildSubject((_) {}, theme: ThemeData.light()));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'does not overflow at a typical Android phone size (Dark theme)',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(393, 851));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        await tester.pumpWidget(buildSubject((_) {}, theme: ThemeData.dark()));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'the Start Game action remains usable through scrolling at a large '
+      'text scale',
+      (tester) async {
+        var callCount = 0;
+        await tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(3.0)),
+            child: buildSubject((_) => callCount++),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Start Game'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(callCount, 1);
+      },
+    );
   });
 
   group('selector label wrapping fix', () {

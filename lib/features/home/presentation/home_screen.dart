@@ -21,20 +21,21 @@ String _difficultyLabel(DifficultyOption option) => switch (option) {
   DifficultyOption.hard => 'Hard',
 };
 
-/// Concise, human-facing description of [option], shown alongside the
-/// label so a player can choose without leaving Home. Mirrors the fuller
-/// explanation on the Rules screen.
+/// Concise, human-facing description of [option], shown beneath the
+/// selector for the currently-selected option only, so a player can confirm
+/// their choice without leaving Home. Mirrors the fuller explanation on the
+/// Rules screen.
 String _difficultyDescription(DifficultyOption option) => switch (option) {
-  DifficultyOption.easy => 'Familiar, high-frequency words.',
-  DifficultyOption.common => 'Broader everyday vocabulary.',
-  DifficultyOption.hard => 'Less frequent, trickier words.',
+  DifficultyOption.easy => 'Familiar, common words.',
+  DifficultyOption.common => 'Balanced everyday vocabulary.',
+  DifficultyOption.hard => 'Less common, trickier words.',
 };
 
 /// The Material icon representing [option], distinct for the selected vs.
 /// unselected state (a filled glyph when selected, an outlined one
 /// otherwise) — one of several non-color cues (alongside the segment's own
-/// selected styling and this screen's [_DifficultyDescriptionRow]) that make
-/// the current selection obvious without relying on color alone.
+/// selected styling and this screen's [_SelectedDifficultyDescription]) that
+/// make the current selection obvious without relying on color alone.
 IconData _difficultyIcon(DifficultyOption option, {required bool selected}) =>
     switch (option) {
       DifficultyOption.easy => selected ? Icons.eco : Icons.eco_outlined,
@@ -157,8 +158,21 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   DifficultyOption _selectedDifficulty = HomeScreen._defaultDifficulty;
 
+  // Latches immediately on tap and releases shortly after, so a rapid
+  // double-tap on "Start Game" (e.g. an impatient player, or two pointers on
+  // a touchscreen) can only ever invoke [HomeScreen.onStartGame] once. In
+  // the real app the screen is normally navigated away from before this
+  // would even matter; the timer-based release just keeps the button usable
+  // again if that navigation doesn't happen (e.g. in tests).
+  bool _startInFlight = false;
+
   void _handleStart() {
+    if (_startInFlight) return;
+    setState(() => _startInFlight = true);
     widget.onStartGame(_selectedDifficulty);
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) setState(() => _startInFlight = false);
+    });
   }
 
   @override
@@ -183,49 +197,51 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: SafeArea(
+        bottom: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.screenPadding),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screenPadding,
+            AppSpacing.screenPadding,
+            AppSpacing.screenPadding,
+            AppSpacing.lg,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const _HomeHeroCard(),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.sm),
               _StreakSummaryRow(
                 currentStreak: widget.currentStreak,
                 longestStreak: widget.longestStreak,
                 shareCardRenderer: widget.shareCardRenderer,
                 shareCardService: widget.shareCardService,
               ),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.sm),
               _DailyChallengeCard(
                 dateLabel: widget.dailyChallengeDateLabel,
                 status: widget.dailyChallengeStatus,
                 onTap: widget.onOpenDailyChallenge,
               ),
-              const SizedBox(height: AppSpacing.lg),
+              const SizedBox(height: AppSpacing.md),
               Text(
-                'Guess the secret word. Each guess earns a bull for every '
-                'letter that is correct and in the right position, and a '
-                'cow for every letter that is correct but in the wrong '
-                'position. Every game uses a 4-letter secret word and gives '
-                'you 10 attempts.',
+                'Guess the hidden 4-letter word in 10 attempts. Bulls are '
+                'in the correct position; cows belong in another position.',
                 style: textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: AppSpacing.xxl),
+              const SizedBox(height: AppSpacing.md),
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  padding: const EdgeInsets.all(AppSpacing.md),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text('Difficulty', style: textTheme.titleMedium),
-                      const SizedBox(height: AppSpacing.xs),
+                      const SizedBox(height: AppSpacing.xs / 2),
                       Text(
-                        'Difficulty only changes which words the game can '
-                        'pick from.',
+                        'Changes which words the game can pick from.',
                         style: textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -239,13 +255,36 @@ class _HomeScreenState extends State<HomeScreen> {
                           // replace each segment's own icon once selected;
                           // this option keeps the filled/outlined icon swap
                           // in [_difficultyIcon] itself visible instead, as
-                          // the "icon state" cue for the current selection.
+                          // one of several non-color "selected" cues
+                          // alongside the segment's own accent background,
+                          // brighter border, and bold label.
                           showSelectedIcon: false,
-                          style: SegmentedButton.styleFrom(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: segmentHorizontalPadding,
-                            ),
-                          ),
+                          style:
+                              SegmentedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: segmentHorizontalPadding,
+                                ),
+                                backgroundColor: colorScheme
+                                    .surfaceContainerHighest
+                                    .withValues(alpha: 0.4),
+                                foregroundColor: colorScheme.onSurfaceVariant,
+                                selectedBackgroundColor: colorScheme.primary,
+                                selectedForegroundColor: colorScheme.onPrimary,
+                                side: BorderSide(
+                                  color: colorScheme.outlineVariant,
+                                ),
+                              ).copyWith(
+                                side: WidgetStateProperty.resolveWith((states) {
+                                  return states.contains(WidgetState.selected)
+                                      ? BorderSide(
+                                          color: colorScheme.primary,
+                                          width: 2,
+                                        )
+                                      : BorderSide(
+                                          color: colorScheme.outlineVariant,
+                                        );
+                                }),
+                              ),
                           segments: [
                             for (final option in DifficultyOption.values)
                               ButtonSegment(
@@ -257,7 +296,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   size: 18,
                                 ),
-                                label: _SegmentLabel(_difficultyLabel(option)),
+                                label: _SegmentLabel(
+                                  _difficultyLabel(option),
+                                  selected: option == _selectedDifficulty,
+                                ),
                               ),
                           ],
                           selected: {_selectedDifficulty},
@@ -268,24 +310,24 @@ class _HomeScreenState extends State<HomeScreen> {
                           },
                         ),
                       ),
-                      const SizedBox(height: AppSpacing.md),
-                      for (final option in DifficultyOption.values)
-                        _DifficultyDescriptionRow(
-                          label: _difficultyLabel(option),
-                          description: _difficultyDescription(option),
-                          selected: option == _selectedDifficulty,
+                      const SizedBox(height: AppSpacing.sm),
+                      AnimatedSwitcher(
+                        duration: AppMotion.durationFor(
+                          context,
+                          AppMotion.fast,
                         ),
+                        switchInCurve: AppMotion.curve,
+                        switchOutCurve: AppMotion.curve,
+                        child: _SelectedDifficultyDescription(
+                          key: ValueKey(_selectedDifficulty),
+                          label: _difficultyLabel(_selectedDifficulty),
+                          description: _difficultyDescription(
+                            _selectedDifficulty,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xxl),
-              FilledButton.icon(
-                onPressed: _handleStart,
-                icon: const Icon(Icons.play_arrow),
-                label: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-                  child: Text('Start Game'),
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -337,26 +379,75 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+      bottomNavigationBar: _StartGameBar(
+        enabled: !_startInFlight,
+        onPressed: _handleStart,
+      ),
     );
   }
 }
 
-/// One row of the difficulty legend beneath the selector: a label and its
-/// concise description, always visible for all three options so a player
-/// can compare them before choosing. [selected] makes the currently chosen
-/// option visually distinct (bold label, check icon, and a subtly tinted
-/// background that animates in) without relying on color alone, and is
-/// mirrored into the row's [Semantics] label.
-class _DifficultyDescriptionRow extends StatelessWidget {
-  const _DifficultyDescriptionRow({
+/// The persistent, always-visible bottom action area holding the primary
+/// "Start Game" button, so the player never has to scroll to find it.
+///
+/// A plain [Container] rather than [BottomAppBar] — this needs no notch/FAB
+/// cutout, just an opaque surface, a subtle top seam, and safe-area-aware
+/// padding for gesture-navigation phones.
+class _StartGameBar extends StatelessWidget {
+  const _StartGameBar({required this.enabled, required this.onPressed});
+
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(top: BorderSide(color: colorScheme.outlineVariant)),
+      ),
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.fromLTRB(
+          AppSpacing.screenPadding,
+          AppSpacing.sm,
+          AppSpacing.screenPadding,
+          AppSpacing.sm,
+        ),
+        child: FilledButton.icon(
+          onPressed: enabled ? onPressed : null,
+          icon: const Icon(Icons.play_arrow),
+          label: const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+            child: Text(
+              'Start Game',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The single description shown beneath the difficulty selector for
+/// whichever option is currently selected — the other two options'
+/// descriptions are deliberately not shown at the same time, keeping this
+/// card compact. Always styled as "selected" (bold label, check icon, and a
+/// subtly tinted background) since it only ever describes the current
+/// selection; the label/description pair is also mirrored into a single
+/// [Semantics] label for screen readers.
+class _SelectedDifficultyDescription extends StatelessWidget {
+  const _SelectedDifficultyDescription({
+    super.key,
     required this.label,
     required this.description,
-    required this.selected,
   });
 
   final String label;
   final String description;
-  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -364,30 +455,20 @@ class _DifficultyDescriptionRow extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     return Semantics(
       excludeSemantics: true,
-      label: selected
-          ? '$label, selected: $description'
-          : '$label: $description',
-      child: AnimatedContainer(
-        duration: AppMotion.durationFor(context, AppMotion.fast),
-        curve: AppMotion.curve,
-        margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs / 2),
+      label: '$label selected: $description',
+      child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.sm,
           vertical: AppSpacing.xs,
         ),
         decoration: BoxDecoration(
-          color: selected
-              ? colorScheme.secondaryContainer.withValues(alpha: 0.5)
-              : Colors.transparent,
+          color: colorScheme.secondaryContainer.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 20,
-              child: selected ? const Icon(Icons.check, size: 18) : null,
-            ),
+            const Icon(Icons.check, size: 18),
             const SizedBox(width: AppSpacing.xs),
             Expanded(
               child: Column(
@@ -400,9 +481,7 @@ class _DifficultyDescriptionRow extends StatelessWidget {
                     // general) can target either unambiguously.
                     '$label:',
                     style: textTheme.bodyMedium?.copyWith(
-                      fontWeight: selected
-                          ? FontWeight.bold
-                          : FontWeight.normal,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                   Text(description, style: textTheme.bodySmall),
@@ -432,13 +511,23 @@ class _DifficultyDescriptionRow extends StatelessWidget {
 /// only safeguard. The underlying [Text.data] — and therefore the
 /// semantics label the platform announces for this segment — is unchanged
 /// by the visual scaling, so the full, complete label is still announced.
+///
+/// [selected] bolds the label and switches it to the selector's
+/// selected-foreground color explicitly, rather than relying solely on the
+/// [SegmentedButton]'s own [ButtonStyle.textStyle] propagation (which a
+/// [TextTheme.labelMedium] with its own non-null `fontWeight`/`color` would
+/// otherwise override via style merging) — one more non-color cue, on top
+/// of the segment's own icon swap and background/border, that the option is
+/// currently selected.
 class _SegmentLabel extends StatelessWidget {
-  const _SegmentLabel(this.text);
+  const _SegmentLabel(this.text, {required this.selected});
 
   final String text;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return FittedBox(
       fit: BoxFit.scaleDown,
       alignment: Alignment.center,
@@ -447,7 +536,12 @@ class _SegmentLabel extends StatelessWidget {
         maxLines: 1,
         softWrap: false,
         overflow: TextOverflow.visible,
-        style: Theme.of(context).textTheme.labelMedium,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+          color: selected
+              ? colorScheme.onPrimary
+              : colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
@@ -675,11 +769,15 @@ class _HomeHeroCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     // Kept modest and responsive so the emblem never dominates the page: a
     // little smaller on narrow phones, capped well below the hero card's
-    // own height on any device.
-    final iconSize = MediaQuery.sizeOf(context).width < 360 ? 44.0 : 52.0;
+    // own height on any device. Trimmed further than the emblem's original
+    // size so the whole card takes noticeably less vertical space.
+    final iconSize = MediaQuery.sizeOf(context).width < 360 ? 36.0 : 42.0;
 
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -694,7 +792,7 @@ class _HomeHeroCard extends StatelessWidget {
         children: [
           ExcludeSemantics(
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               child: Image.asset(
                 'assets/branding/cow_bull_quest_icon.png',
                 width: iconSize,
@@ -703,7 +801,7 @@ class _HomeHeroCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: AppSpacing.md),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -713,15 +811,18 @@ class _HomeHeroCard extends StatelessWidget {
                   header: true,
                   child: Text(
                     'Cow Bull Quest',
-                    style: textTheme.headlineSmall?.copyWith(
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.titleLarge?.copyWith(
                       color: _heroForeground,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'A word-guessing game of bulls and cows.',
+                  'A quick game of bulls and cows.',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: textTheme.bodySmall?.copyWith(
                     color: _heroForeground.withValues(alpha: 0.85),
                   ),
