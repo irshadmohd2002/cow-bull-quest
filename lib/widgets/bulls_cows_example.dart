@@ -38,9 +38,13 @@ const List<_LetterStatus> _exampleStatuses = [
 ///
 /// Every letter's status is conveyed by an icon, a text label, and a
 /// distinct border/fill style — never by color alone — so it reads
-/// correctly for a color-blind player or a screen reader alike. Wrapped in
-/// a [Wrap] (not a fixed-width [Row]) so it never overflows at large text
-/// scale or on narrow screens.
+/// correctly for a color-blind player or a screen reader alike. Laid out as
+/// a [Row] of four equally-sized [Expanded] tiles (not a [Wrap]) so L, A, W,
+/// and N always stay on one line — an [Expanded] child's width is capped by
+/// its share of the row, so it can never force a sibling into a second
+/// line the way a fixed-width tile in a [Wrap] can. Each tile's own label
+/// wraps (up to two short lines) rather than the row wrapping, so large
+/// text scale grows the tiles' height, never their count per line.
 class BullsCowsExample extends StatelessWidget {
   const BullsCowsExample({super.key});
 
@@ -85,16 +89,21 @@ class BullsCowsExample extends StatelessWidget {
                   style: textTheme.bodyMedium,
                 ),
                 const SizedBox(height: AppSpacing.md),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: [
-                    for (var i = 0; i < _exampleGuess.length; i++)
-                      _LetterTile(
-                        letter: _exampleGuess[i],
-                        status: _exampleStatuses[i],
-                      ),
-                  ],
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < _exampleGuess.length; i++) ...[
+                        if (i > 0) const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: _LetterTile(
+                            letter: _exampleGuess[i],
+                            status: _exampleStatuses[i],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 Text(
@@ -154,10 +163,9 @@ class _LetterTile extends StatelessWidget {
     };
 
     return Container(
-      width: 76,
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xs,
-        vertical: AppSpacing.sm,
+        horizontal: AppSpacing.xs / 2,
+        vertical: AppSpacing.xs,
       ),
       decoration: BoxDecoration(
         color: background,
@@ -166,22 +174,25 @@ class _LetterTile extends StatelessWidget {
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
             letter.toUpperCase(),
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              fontSize: 18,
+              fontSize: 16,
               color: foreground,
             ),
           ),
           const SizedBox(height: AppSpacing.xs / 2),
-          Icon(icon, size: 16, color: foreground),
+          Icon(icon, size: 15, color: foreground),
           const SizedBox(height: AppSpacing.xs / 2),
           Text(
             label,
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: foreground),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 10, color: foreground, height: 1.1),
           ),
         ],
       ),

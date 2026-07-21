@@ -1276,41 +1276,61 @@ class _StartupFailureView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.error_outline, size: 48, color: colorScheme.error),
-          const SizedBox(height: AppSpacing.lg),
-          const Text(
-            "We couldn't start the game. Please try again.",
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Semantics(
-                button: true,
-                label: 'Home',
-                child: ExcludeSemantics(
-                  child: OutlinedButton.icon(
-                    onPressed: onReturnHome,
-                    icon: const Icon(Icons.home_rounded),
-                    label: const Text('Home'),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // A scrollable fallback, centered via minHeight rather than a bare
+        // Center: at very large text scale the message can wrap onto enough
+        // lines to exceed a short screen's height, and a plain Center would
+        // overflow instead of scrolling.
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight - AppSpacing.lg * 2,
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: colorScheme.error),
+                  const SizedBox(height: AppSpacing.lg),
+                  const Text(
+                    "We couldn't start the game. Please try again.",
+                    textAlign: TextAlign.center,
                   ),
-                ),
+                  const SizedBox(height: AppSpacing.xl),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Semantics(
+                          button: true,
+                          label: 'Home',
+                          child: ExcludeSemantics(
+                            child: OutlinedButton.icon(
+                              onPressed: onReturnHome,
+                              icon: const Icon(Icons.home_rounded),
+                              label: const Text('Home'),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Flexible(
+                        child: FilledButton.icon(
+                          onPressed: onRetry,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(width: AppSpacing.md),
-              FilledButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
-            ],
+            ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

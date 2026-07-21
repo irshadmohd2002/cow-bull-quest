@@ -48,9 +48,11 @@ class CoinSummaryCard extends StatelessWidget {
               children: [
                 Icon(Icons.paid, color: coinAccent, size: 20),
                 const SizedBox(width: AppSpacing.xs),
-                Semantics(
-                  header: true,
-                  child: Text('Coins', style: textTheme.titleMedium),
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text('Coins', style: textTheme.titleMedium),
+                  ),
                 ),
               ],
             ),

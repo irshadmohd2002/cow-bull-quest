@@ -60,26 +60,28 @@ class GuessHistoryTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _ScoreBadge(
-                    icon: Icons.gps_fixed,
-                    label: 'Bulls',
-                    value: bulls,
-                    background: colorScheme.tertiaryContainer,
-                    foreground: colorScheme.onTertiaryContainer,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  _ScoreBadge(
-                    icon: Icons.sync_alt,
-                    label: 'Cows',
-                    value: cows,
-                    background: colorScheme.secondaryContainer,
-                    foreground: colorScheme.onSecondaryContainer,
-                  ),
-                ],
+              Flexible(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _ScoreBadge(
+                      icon: Icons.gps_fixed,
+                      label: 'Bulls',
+                      value: bulls,
+                      background: colorScheme.tertiaryContainer,
+                      foreground: colorScheme.onTertiaryContainer,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    _ScoreBadge(
+                      icon: Icons.sync_alt,
+                      label: 'Cows',
+                      value: cows,
+                      background: colorScheme.secondaryContainer,
+                      foreground: colorScheme.onSecondaryContainer,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -120,18 +122,26 @@ class _ScoreBadge extends StatelessWidget {
         color: background,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: foreground),
-          const SizedBox(width: AppSpacing.xs),
-          Text(
-            '$label: $value',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: foreground),
-          ),
-        ],
+      // Scales the whole badge down rather than overflowing when the tile
+      // is squeezed narrower than the badge's natural size (a narrow phone
+      // combined with a large text scale) — see the class-level doc on
+      // GuessHistoryTile for why this Row has no Expanded/Flexible child of
+      // its own to shrink instead.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: foreground),
+            const SizedBox(width: AppSpacing.xs),
+            Text(
+              '$label: $value',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: foreground),
+            ),
+          ],
+        ),
       ),
     );
   }
