@@ -1,5 +1,6 @@
 import 'package:cowbullgame/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:cowbullgame/theme/app_theme.dart';
+import 'package:cowbullgame/widgets/app_bullet_item.dart';
 import 'package:cowbullgame/widgets/bulls_cows_example.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -171,5 +172,77 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+  });
+
+  group('bullet alignment', () {
+    testWidgets('every bullet on the first page is rendered as an '
+        'AppBulletItem', (tester) async {
+      await tester.pumpWidget(buildSubject());
+
+      expect(find.byType(AppBulletItem), findsNWidgets(3));
+    });
+
+    testWidgets('each bullet exposes exactly one semantics label for its '
+        'sentence — the decorative dot is never announced separately', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject());
+
+      expect(
+        find.bySemanticsLabel('Guess the hidden 4-letter word.'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel('You have 10 attempts.'), findsOneWidget);
+    });
+
+    testWidgets(
+      'on the multi-line "Difficulty and Hints" page, each bullet dot '
+      'aligns with its first line (stays above the paragraph midpoint, not '
+      'centered against it)',
+      (tester) async {
+        await tester.pumpWidget(buildSubject());
+        await tester.tap(find.text('Next'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Next'));
+        await tester.pumpAndSettle();
+        expect(find.text('Difficulty and Hints'), findsOneWidget);
+
+        final dots = find.byIcon(Icons.circle);
+        final texts = find.byType(AppBulletItem);
+        expect(texts, findsWidgets);
+
+        for (var i = 0; i < tester.widgetList(dots).length; i++) {
+          final dotRect = tester.getRect(dots.at(i));
+          final itemRect = tester.getRect(texts.at(i));
+          expect(dotRect.center.dy, lessThan(itemRect.center.dy));
+        }
+      },
+    );
+
+    testWidgets(
+      'does not overflow on every onboarding page at a narrow width and a '
+      'large text scale together',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 700);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2.0)),
+            child: buildSubject(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        for (var i = 0; i < 3; i++) {
+          await tester.tap(find.text('Next'));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
   });
 }

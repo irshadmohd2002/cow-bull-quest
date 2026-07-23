@@ -229,8 +229,8 @@ void main() {
     await enterAndSubmit(tester, 'race');
 
     expect(find.text('RACE'), findsOneWidget);
-    expect(find.textContaining('Bulls:'), findsOneWidget);
-    expect(find.textContaining('Cows:'), findsOneWidget);
+    expect(find.textContaining('Bulls'), findsOneWidget);
+    expect(find.textContaining('Cows'), findsOneWidget);
   });
 
   testWidgets('accepted guess clears the input field', (tester) async {
@@ -293,8 +293,8 @@ void main() {
       );
       expect(find.textContaining('0 of 10 attempts used'), findsOneWidget);
       // No history row was added: the only guess-history related text on
-      // screen is the empty-state, never a scored 'Bulls:'/'Cows:' row.
-      expect(find.textContaining('Bulls:'), findsNothing);
+      // screen is the empty-state, never a scored Bulls/Cows badge row.
+      expect(find.textContaining('Bulls'), findsNothing);
     },
   );
 
@@ -663,8 +663,8 @@ void main() {
 
     expect(find.text('1'), findsOneWidget);
     expect(find.text('RACE'), findsOneWidget);
-    expect(find.textContaining('Bulls:'), findsOneWidget);
-    expect(find.textContaining('Cows:'), findsOneWidget);
+    expect(find.textContaining('Bulls'), findsOneWidget);
+    expect(find.textContaining('Cows'), findsOneWidget);
   });
 
   testWidgets('completion exposes the outcome and secret word through '

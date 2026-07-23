@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/app_spacing.dart';
 import '../../../widgets/bulls_cows_example.dart';
+import '../../../widgets/cow_head_icon.dart';
+import '../../../widgets/guess_result_badge.dart';
 
 /// Explains how Bulls & Cows is played.
 ///
@@ -68,13 +70,14 @@ class RulesScreen extends StatelessWidget {
               _SectionHeading('Scoring'),
               const SizedBox(height: AppSpacing.sm),
               Card(
+                key: const Key('rules_scoring_section'),
                 child: Padding(
                   padding: const EdgeInsets.all(AppSpacing.lg),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _RuleItem(
-                        icon: Icons.gps_fixed,
+                        icon: Icons.gps_fixed_rounded,
                         heading: 'Bulls',
                         explanation:
                             'A bull is a letter that is correct and in the '
@@ -83,12 +86,14 @@ class RulesScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: AppSpacing.md),
                       _RuleItem(
-                        icon: Icons.sync_alt,
+                        iconWidget: CowHeadIcon(
+                          size: 24,
+                          color: colorScheme.secondary,
+                        ),
                         heading: 'Cows',
                         explanation:
                             'A cow is a letter that is correct but in the '
                             'wrong position.',
-                        iconColor: colorScheme.secondary,
                       ),
                       const SizedBox(height: AppSpacing.md),
                       const _RuleItem(
@@ -430,20 +435,32 @@ class _SectionHeading extends StatelessWidget {
 
 class _RuleItem extends StatelessWidget {
   const _RuleItem({
-    required this.icon,
+    this.icon,
+    this.iconWidget,
     required this.heading,
     required this.explanation,
     this.iconColor,
-  });
+  }) : assert(
+         (icon == null) != (iconWidget == null),
+         'Provide exactly one of icon or iconWidget.',
+       );
 
-  final IconData icon;
+  /// A [Material] glyph. Mutually exclusive with [iconWidget], which is used
+  /// instead for icons with no [IconData] equivalent (e.g. [CowHeadIcon]).
+  final IconData? icon;
+
+  /// A fully custom leading icon, e.g. [CowHeadIcon]. Mutually exclusive
+  /// with [icon].
+  final Widget? iconWidget;
+
   final String heading;
   final String explanation;
 
-  /// Overrides the icon's color; defaults to [ColorScheme.primary]. Used to
-  /// mirror the Bulls/Cows badge colors already used on the Game screen
-  /// (cyan tertiary for Bulls, blue secondary for Cows) so the same concept
-  /// reads with the same accent color everywhere it appears.
+  /// Overrides [icon]'s color; defaults to [ColorScheme.primary]. Ignored
+  /// when [iconWidget] is used — that widget colors itself. Used to mirror
+  /// the Bulls/Cows badge colors already used on the Game screen (cyan
+  /// tertiary for Bulls) so the same concept reads with the same accent
+  /// color everywhere it appears.
   final Color? iconColor;
 
   @override
@@ -456,7 +473,7 @@ class _RuleItem extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: iconColor ?? colorScheme.primary),
+          iconWidget ?? Icon(icon, color: iconColor ?? colorScheme.primary),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
@@ -511,9 +528,16 @@ class _RuleExample extends StatelessWidget {
               Text('Secret: $secretWord'),
               Text('Guess: $guessWord'),
               const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Bulls: $bulls   Cows: $cows',
-                style: Theme.of(context).textTheme.titleSmall,
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  GuessResultBadge(
+                    type: GuessResultBadgeType.bull,
+                    count: bulls,
+                  ),
+                  GuessResultBadge(type: GuessResultBadgeType.cow, count: cows),
+                ],
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(explanation),

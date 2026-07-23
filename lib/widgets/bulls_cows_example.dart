@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_spacing.dart';
+import 'guess_result_badge.dart';
 
 /// A letter's status within [BullsCowsExample]'s worked guess.
 enum _LetterStatus { bull, cow, absent }
@@ -106,10 +107,21 @@ class BullsCowsExample extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                Text(
-                  'Result: $bulls ${bulls == 1 ? 'Bull' : 'Bulls'}, '
-                  '$cows ${cows == 1 ? 'Cow' : 'Cows'}.',
-                  style: textTheme.titleSmall,
+                Text('Result', style: textTheme.titleSmall),
+                const SizedBox(height: AppSpacing.xs),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    GuessResultBadge(
+                      type: GuessResultBadgeType.bull,
+                      count: bulls,
+                    ),
+                    GuessResultBadge(
+                      type: GuessResultBadgeType.cow,
+                      count: cows,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_spacing.dart';
+import '../../../widgets/app_bullet_item.dart';
 import '../../../widgets/bulls_cows_example.dart';
 import '../models/onboarding_page_model.dart';
 
@@ -239,18 +240,7 @@ class _OnboardingPageView extends StatelessWidget {
           for (final bullet in page.bullets)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.circle,
-                    size: 8,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(child: Text(bullet, style: textTheme.bodyLarge)),
-                ],
-              ),
+              child: AppBulletItem(text: bullet, style: textTheme.bodyLarge),
             ),
           if (page.example) ...[
             const SizedBox(height: AppSpacing.md),

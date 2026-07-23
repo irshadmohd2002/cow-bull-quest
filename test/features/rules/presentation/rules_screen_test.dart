@@ -1,5 +1,6 @@
 import 'package:cowbullgame/features/rules/presentation/rules_screen.dart';
 import 'package:cowbullgame/widgets/bulls_cows_example.dart';
+import 'package:cowbullgame/widgets/cow_head_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -37,6 +38,38 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'uses the shared target and cow-head icons in the Scoring section, not '
+    'the old compare-arrows stand-in',
+    (tester) async {
+      await tester.pumpWidget(buildSubject());
+
+      final scoringSection = find.byKey(const Key('rules_scoring_section'));
+
+      expect(
+        find.descendant(
+          of: scoringSection,
+          matching: find.byIcon(Icons.gps_fixed_rounded),
+        ),
+        findsWidgets,
+      );
+      expect(
+        find.descendant(
+          of: scoringSection,
+          matching: find.byType(CowHeadIcon),
+        ),
+        findsWidgets,
+      );
+      expect(
+        find.descendant(
+          of: scoringSection,
+          matching: find.byIcon(Icons.sync_alt),
+        ),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets('explains the duplicate-letter rule', (tester) async {
     await tester.pumpWidget(buildSubject());
@@ -100,10 +133,14 @@ void main() {
     expect(find.text('Guess: DEER'), findsOneWidget);
   });
 
-  testWidgets('exposes example results as text', (tester) async {
+  testWidgets('exposes example results as text via the shared badge', (
+    tester,
+  ) async {
     await tester.pumpWidget(buildSubject());
-    expect(find.textContaining('Bulls: 3   Cows: 0'), findsOneWidget);
-    expect(find.textContaining('Bulls: 2   Cows: 1'), findsOneWidget);
+    expect(find.text('Bulls 3'), findsOneWidget);
+    expect(find.text('Cows 0'), findsOneWidget);
+    expect(find.text('Bulls 2'), findsOneWidget);
+    expect(find.text('Cow 1'), findsOneWidget);
   });
 
   testWidgets('exposes example results through semantics', (tester) async {

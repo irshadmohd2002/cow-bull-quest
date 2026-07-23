@@ -102,11 +102,13 @@ void main() {
   });
 
   group('the four L/A/W/N tiles stay on one row', () {
-    /// The four tiles are the only [Container]s [BullsCowsExample] renders
-    /// (the rest of the tree is Card/Padding/Column/Row/Text/Icon), so
-    /// scoping by type is enough to find them in guess order: L, A, W, N.
+    /// The four tiles are the only [Container]s inside the
+    /// [IntrinsicHeight] that lays out the L/A/W/N row — the Result
+    /// section's [GuessResultBadge]s render their own [Container]s too, but
+    /// outside that [IntrinsicHeight] — so scoping to it is enough to find
+    /// the four tiles in guess order: L, A, W, N.
     Finder tileFinder() => find.descendant(
-      of: find.byType(BullsCowsExample),
+      of: find.byType(IntrinsicHeight),
       matching: find.byType(Container),
     );
 

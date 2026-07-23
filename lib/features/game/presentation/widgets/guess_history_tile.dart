@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../theme/app_spacing.dart';
+import '../../../../widgets/guess_result_badge.dart';
 import '../../models/guess.dart';
 
 /// One row of guess history: the turn number, the guessed word, and its
@@ -21,12 +22,12 @@ class GuessHistoryTile extends StatelessWidget {
 
     // A plain Row, not a Material ListTile: ListTile budgets its trailing
     // slot's size (both width and height) against its own single-line
-    // content assumptions, which two stacked score badges can exceed at
-    // large text-scale factors (a real, previously-hit RenderFlex overflow),
-    // while a wide single-line trailing Row can exceed ListTile's separate
-    // hard rule that trailing must never consume the tile's entire width on
-    // narrow screens (also previously hit). A Row here simply sizes itself
-    // to its children's natural size with no hidden budget, so it stays
+    // content assumptions, which two badges can exceed at large text-scale
+    // factors (a real, previously-hit RenderFlex overflow), while a wide
+    // single-line trailing Row can exceed ListTile's separate hard rule
+    // that trailing must never consume the tile's entire width on narrow
+    // screens (also previously hit). A Row here simply sizes itself to its
+    // children's natural size with no hidden budget, so it stays
     // overflow-safe at both extremes.
     return Semantics(
       excludeSemantics: true,
@@ -60,87 +61,33 @@ class GuessHistoryTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
+              // Each badge is independently Flexible (rather than the Row
+              // itself being one Flexible child) so a badge shrinks via its
+              // own internal FittedBox only as far as it individually needs
+              // to — the two badges never fight each other for the same
+              // shrink budget.
               Flexible(
-                child: Column(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    _ScoreBadge(
-                      icon: Icons.gps_fixed,
-                      label: 'Bulls',
-                      value: bulls,
-                      background: colorScheme.tertiaryContainer,
-                      foreground: colorScheme.onTertiaryContainer,
+                    Flexible(
+                      child: GuessResultBadge(
+                        type: GuessResultBadgeType.bull,
+                        count: bulls,
+                      ),
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                    _ScoreBadge(
-                      icon: Icons.sync_alt,
-                      label: 'Cows',
-                      value: cows,
-                      background: colorScheme.secondaryContainer,
-                      foreground: colorScheme.onSecondaryContainer,
+                    const SizedBox(width: AppSpacing.xs),
+                    Flexible(
+                      child: GuessResultBadge(
+                        type: GuessResultBadgeType.cow,
+                        count: cows,
+                      ),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A small text-plus-icon badge for one score (bulls or cows). The icon is
-/// purely decorative reinforcement — [label] and [value] are always shown as
-/// text, so the score is never conveyed by icon or color alone. [background]/
-/// [foreground] give bulls and cows visually distinct, accessible colors
-/// (never relying on the icon or text alone to tell them apart).
-class _ScoreBadge extends StatelessWidget {
-  const _ScoreBadge({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.background,
-    required this.foreground,
-  });
-
-  final IconData icon;
-  final String label;
-  final int value;
-  final Color background;
-  final Color foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.xs / 2,
-      ),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      // Scales the whole badge down rather than overflowing when the tile
-      // is squeezed narrower than the badge's natural size (a narrow phone
-      // combined with a large text scale) — see the class-level doc on
-      // GuessHistoryTile for why this Row has no Expanded/Flexible child of
-      // its own to shrink instead.
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: foreground),
-            const SizedBox(width: AppSpacing.xs),
-            Text(
-              '$label: $value',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: foreground),
-            ),
-          ],
         ),
       ),
     );
